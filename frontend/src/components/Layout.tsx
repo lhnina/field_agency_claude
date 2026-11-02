@@ -61,6 +61,9 @@ export default function Layout() {
           </div>
         ))}
         <div className="mt-auto pt-3.5 border-t border-[#1F4442]">
+          <NavLink to="/importacao" className={({ isActive }) => `flex items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] ${isActive ? 'bg-[#1F4744] text-white font-medium [&_svg]:text-amber-400' : 'hover:bg-petrol-800 hover:text-white'}`}>
+            <Icon name="sliders" /><span>Importar dados</span>
+          </NavLink>
           <button type="button" onClick={() => { session.clear(); nav('/login') }}
             className="flex w-full items-center gap-2.5 h-9 px-2.5 rounded-lg text-[13.5px] hover:bg-petrol-800 hover:text-white">
             <Icon name="logout" /><span>Terminar sessão</span>

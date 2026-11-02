@@ -27,7 +27,7 @@ export default function PreFaturacao() {
   return (
     <>
       <PageHeader crumb="Financeiro" title="Pré-faturação"
-        sub={area === 'REP' ? 'Reposição: faturada pelas horas contratadas (h/semana × 52 ÷ 12 × preço), em proporção dos dias de vigência no mês.' : 'Promoções: faturadas pelas horas planeadas da campanha no mês.'}>
+        sub={area === 'REP' ? 'Reposição: faturada pelas horas contratadas (h/semana × 52 ÷ 12 × preço), em proporção dos dias de vigência no mês. As lojas sem colaborador também são faturadas.' : 'Promoções: faturadas pelas horas planeadas da campanha no mês. As lojas sem colaborador também são faturadas.'}>
         <Seg label="Área" value={area} onChange={setArea} options={[{ value: 'REP', label: 'Reposição' }, { value: 'PRO', label: 'Promoções' }]} />
         <MesInput value={mes} onChange={setMes} />
         {d && <FechoPeriodo tipo="faturacao" mes={mes} area={area} fechado={d.fechado} onDone={() => qc.invalidateQueries({ queryKey: ['prefaturacao'] })}

@@ -4,8 +4,8 @@ Regras (respostas ao documento de análise):
 - Q1: faturação por horas CONTRATADAS; as executadas servem para apurar o custo.
 - Q3: horas/mês = horas/semana × 52 ÷ 12 (Reposição). Linha que começa ou acaba a meio
   do mês é faturada em proporção dos dias de vigência nesse mês.
-- Promoções [hipótese H]: o contratado é o plano de turnos da campanha, logo fatura-se
-  a soma das horas planeadas no mês (a validar com o cliente).
+- Promoções: faturam-se as horas planeadas da campanha no mês (confirmado a 2 nov 2026).
+- Linhas sem colaborador continuam a ser faturadas pelas horas contratadas (confirmado).
 - Q4: aceitação tácita — sem registo, a ocorrência conta com as horas planeadas, também
   para remuneração.
 - Q5: supervisor e gestor podem validar.

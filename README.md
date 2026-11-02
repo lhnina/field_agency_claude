@@ -2,7 +2,7 @@
 
 Plataforma de gestão operacional para agências de field marketing: reposição, promoções, logística e equipas fixas.
 
-**Estado: MVP, incremento 2.** Inclui:
+**Estado: MVP concluído (incrementos 1 a 3).** Inclui:
 
 - dados mestre;
 - contratos com horas por dia da semana;
@@ -13,7 +13,8 @@ Plataforma de gestão operacional para agências de field marketing: reposição
 - pré-faturação por área e mês;
 - apuramento de remunerações com exportação CSV para o PHC;
 - fecho e reabertura de períodos;
-- contador da muito curta duração.
+- contador da muito curta duração;
+- importação inicial por Excel de clientes, lojas, colaboradores e contratos (menu **Importar dados**).
 
 Referências:
 
@@ -93,14 +94,31 @@ frontend/
 | Aceitação tácita: um serviço passado, sem registo, conta com as horas planeadas, também para remuneração. Desliga-se por organização. | Q4 |
 | O supervisor (só a sua equipa) e o gestor validam. Corrigir horas já validadas exige motivo e obriga a nova validação. | Q5 |
 | Um serviço rejeitado conta com 0 horas de custo e de remuneração; a faturação de Reposição não muda. | Q1 |
-| Pré-faturação de Reposição: h/semana × 52 ÷ 12 × preço, em proporção dos dias de vigência no mês. Promoções: horas planeadas da campanha no mês (hipótese a validar). Nesta fase é só para consulta. | Q1, Q3, Q7 |
+| Pré-faturação de Reposição: h/semana × 52 ÷ 12 × preço, em proporção dos dias de vigência no mês. Promoções: horas planeadas da campanha no mês. As linhas sem colaborador também são faturadas. Nesta fase é só para consulta. | Q1, Q3, Q7 |
 | Apuramento: horas validadas × custo/hora do colaborador (ou custo especial da linha), por colaborador e cliente. Os prestadores aparecem separados. CSV com `;`, decimais com vírgula e UTF-8. | Q6, Q8 |
 | Fecho mensal: a faturação fecha por área e a remuneração fecha o mês inteiro, que só fecha sem serviços por validar. Depois do fecho, nada desse mês se altera. Só a Direção ou o Administrador reabrem. | R10, R11 |
 | Muito curta duração: alerta a partir de 56 de 70 dias no ano e de 28 de 35 dias seguidos; erro quando se excede. | Código do Trabalho, art. 142.º |
 
+## Importação inicial (Excel)
+
+Em **Importar dados**, importe por esta ordem:
+
+1. clientes;
+2. lojas;
+3. colaboradores;
+4. contratos.
+
+Para cada tipo:
+
+- Descarregue o modelo, que traz uma linha de exemplo e uma folha de instruções.
+- Carregue o ficheiro preenchido e veja a pré-visualização, com os erros e avisos de cada linha.
+- Importe. Só é possível importar quando não houver erros, e a importação grava tudo de uma vez.
+
+Clientes, lojas e colaboradores que já existem são atualizados; as células vazias não apagam valores. Os contratos são sempre criados de novo: as linhas com a mesma "Referência" formam um contrato. Contratos ativos geram logo o planeamento.
+
 ## Próximos passos
 
-- Importação inicial de lojas, colaboradores e contratos por Excel (B03).
+- Encargos sociais no custo/hora (decisão pendente: ficha com encargos ou percentagem por tipo de vínculo).
 - Documentação com validades (B17) e alertas no planeamento.
 - App do colaborador (PWA): escala, confirmação e registo de horas (B18). Passa a alimentar a origem "registo" na validação.
 - Envio da pré-faturação para o PHC, como dossier interno BO/BI com detalhe por loja (Q7, fase 2).

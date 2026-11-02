@@ -17,6 +17,7 @@ import Ausencias from './pages/Ausencias'
 import Validacao from './pages/Validacao'
 import PreFaturacao from './pages/PreFaturacao'
 import Apuramentos from './pages/Apuramentos'
+import Importacao from './pages/Importacao'
 import type { ReactNode } from 'react'
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 } } })
@@ -43,6 +44,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="validacao" element={<Validacao />} />
               <Route path="prefaturacao" element={<PreFaturacao />} />
               <Route path="apuramentos" element={<Apuramentos />} />
+              <Route path="importacao" element={<Importacao />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
