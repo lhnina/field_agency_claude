@@ -95,6 +95,7 @@ frontend/
 | O supervisor (só a sua equipa) e o gestor validam. Corrigir horas já validadas exige motivo e obriga a nova validação. | Q5 |
 | Um serviço rejeitado conta com 0 horas de custo e de remuneração; a faturação de Reposição não muda. | Q1 |
 | Pré-faturação de Reposição: h/semana × 52 ÷ 12 × preço, em proporção dos dias de vigência no mês. Promoções: horas planeadas da campanha no mês. As linhas sem colaborador também são faturadas. Nesta fase é só para consulta. | Q1, Q3, Q7 |
+| Encargos sociais: uma percentagem por tipo de vínculo (em **Configuração**) soma-se ao custo/hora nos custos e margens. O apuramento salarial usa o valor sem encargos. | Decisão de 2 nov 2026 |
 | Apuramento: horas validadas × custo/hora do colaborador (ou custo especial da linha), por colaborador e cliente. Os prestadores aparecem separados. CSV com `;`, decimais com vírgula e UTF-8. | Q6, Q8 |
 | Fecho mensal: a faturação fecha por área e a remuneração fecha o mês inteiro, que só fecha sem serviços por validar. Depois do fecho, nada desse mês se altera. Só a Direção ou o Administrador reabrem. | R10, R11 |
 | Muito curta duração: alerta a partir de 56 de 70 dias no ano e de 28 de 35 dias seguidos; erro quando se excede. | Código do Trabalho, art. 142.º |
@@ -118,7 +119,6 @@ Clientes, lojas e colaboradores que já existem são atualizados; as células va
 
 ## Próximos passos
 
-- Encargos sociais no custo/hora (decisão pendente: ficha com encargos ou percentagem por tipo de vínculo).
 - Documentação com validades (B17) e alertas no planeamento.
 - App do colaborador (PWA): escala, confirmação e registo de horas (B18). Passa a alimentar a origem "registo" na validação.
 - Envio da pré-faturação para o PHC, como dossier interno BO/BI com detalhe por loja (Q7, fase 2).

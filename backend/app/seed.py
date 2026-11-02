@@ -35,7 +35,9 @@ def run(reset: bool = True) -> None:
             tabelas = ", ".join(t.name for t in reversed(Base.metadata.sorted_tables))
             conn.execute(text(f"TRUNCATE {tabelas} RESTART IDENTITY CASCADE"))
     db = SessionLocal()
-    t = Tenant(nome="Promovida Field Services", nif="509000000")
+    # Encargos de demonstração (ajustáveis em Configuração): trabalhadores +40 %, prestadores 0 %
+    t = Tenant(nome="Promovida Field Services", nif="509000000", encargos_sem_termo_pct=D("40"), encargos_a_termo_pct=D("40"),
+               encargos_muito_curta_pct=D("40"), encargos_recibos_verdes_pct=D("0"))
     db.add(t)
     db.flush()
     T = t.id

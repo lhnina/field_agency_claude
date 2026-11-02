@@ -167,3 +167,29 @@ def test_api_fecho_so_financeiro_ou_direcao(client, mundo):
     r = client.post("/api/periodos/fechar", headers=token(client, "f@t.pt"), json=body)
     assert r.status_code == 200, r.text
     assert client.get("/api/prefaturacao", headers=token(client, "f@t.pt"), params={"mes": "2026-10"}).json()["fechado"]
+
+
+def test_encargos_entram_na_margem_mas_nao_no_apuramento(mundo):
+    ln = preparar(mundo)  # Inês, a termo, 11,40 €/h
+    fecho.aplicar_aceitacao_tacita(mundo.db, mundo.t.id, date(2026, 10, 31))
+    out = [o for o in ocs(mundo, ln) if o.data.month == 10]
+    fecho.validar(mundo.db, mundo.gestor, out, True, None, HOJE)
+    horas = 2 * len(out)
+    base = fecho.prefaturacao(mundo.db, mundo.t.id, OUT, "REP", HOJE)["totais"]["custo"]
+    assert base == round(horas * 11.40, 2)
+    mundo.t.encargos_a_termo_pct = D("40")
+    com = fecho.prefaturacao(mundo.db, mundo.t.id, OUT, "REP", HOJE)["totais"]["custo"]
+    assert com == round(horas * 11.40 * 1.4, 2)
+    ap = fecho.apuramento(mundo.db, mundo.t.id, OUT, HOJE)
+    assert ap["colaboradores"][0]["linhas"][0]["valor_hora"] == 11.40  # salário sem encargos
+
+
+def test_api_configuracao_so_direcao(client, mundo):
+    mundo.db.commit()
+    body = {"aceitacao_tacita": True, "limite_margem_pct": 20, "encargos_sem_termo_pct": 38.5,
+            "encargos_a_termo_pct": 38.5, "encargos_muito_curta_pct": 30, "encargos_recibos_verdes_pct": 0}
+    assert client.put("/api/configuracao", headers=token(client, "g@t.pt"), json=body).status_code == 403
+    mundo.gestor.perfil = Perfil.direcao
+    mundo.db.commit()
+    r = client.put("/api/configuracao", headers=token(client, "g@t.pt"), json=body)
+    assert r.status_code == 200 and float(r.json()["encargos_muito_curta_pct"]) == 30

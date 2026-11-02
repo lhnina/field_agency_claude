@@ -118,11 +118,15 @@ def validar(db: Session, user: User, ocorrencias: list[Ocorrencia], aprovar: boo
 
 
 # ------------------------------------------------------------------ custo
-def custo_hora(o: Ocorrencia, colabs: dict[int, Colaborador]) -> Decimal:
-    if o.linha.custo_hora_especial is not None:
-        return o.linha.custo_hora_especial
+def custo_hora(o: Ocorrencia, colabs: dict[int, Colaborador], tenant: Tenant | None = None) -> Decimal:
+    """Valor/hora do colaborador (ou custo especial da linha). Com `tenant`, soma os
+    encargos da agência do tipo de vínculo — é o custo usado nas margens. Sem `tenant`
+    é o valor pago ao colaborador, usado no apuramento de remunerações."""
     c = colabs.get(o.colaborador_id) if o.colaborador_id else None
-    return c.custo_hora if c else Z
+    base = o.linha.custo_hora_especial if o.linha.custo_hora_especial is not None else (c.custo_hora if c else Z)
+    if tenant is not None and c is not None:
+        base = base * (1 + tenant.encargos_pct(c.vinculo) / 100)
+    return base
 
 
 def horas_custo(o: Ocorrencia) -> Decimal:
@@ -154,6 +158,7 @@ def prefaturacao(db: Session, tenant_id: int, mes: date, area: str, hoje: date) 
     fim = proximo_mes(mes)
     dias_mes = monthrange(mes.year, mes.month)[1]
     colabs = _colabs(db, tenant_id)
+    tenant = db.get(Tenant, tenant_id)
     ocs = _ocorrencias_mes(db, tenant_id, mes, area)
     por_linha: dict[int, list[Ocorrencia]] = defaultdict(list)
     for o in ocs:
@@ -186,7 +191,7 @@ def prefaturacao(db: Session, tenant_id: int, mes: date, area: str, hoje: date) 
                 h_contr = sum((o.horas_planeadas for o in lo if o.estado != EstadoOcorrencia.cancelado), Z)
                 valor = op.q2(h_contr * ln.preco_hora)
             h_exec = sum((horas_custo(o) for o in lo), Z)
-            custo = op.q2(sum((horas_custo(o) * custo_hora(o, colabs) for o in lo), Z))
+            custo = op.q2(sum((horas_custo(o) * custo_hora(o, colabs, tenant) for o in lo), Z))
             pend = sum(1 for o in lo if o.estado in PENDENTES and o.data <= hoje)
             linha = {
                 "linha_id": ln.id, "loja": ln.loja.nome, "dias_vigencia": dias, "dias_mes": dias_mes,

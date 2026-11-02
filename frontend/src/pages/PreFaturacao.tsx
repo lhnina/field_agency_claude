@@ -38,7 +38,7 @@ export default function PreFaturacao() {
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <Kpi label={`A faturar · ${nomeMes(mes)}`} value={eur(d.totais.valor ?? 0)} sub={`${d.clientes.length} clientes`} />
             <Kpi label="Horas contratadas" value={horas(Math.round((d.totais.horas_contratadas ?? 0) * 10) / 10)} sub={`executadas ${horas(Math.round((d.totais.horas_executadas ?? 0) * 10) / 10)}`} />
-            <Kpi label="Custo de mão de obra" value={eur(d.totais.custo ?? 0)} sub="horas executadas × custo/hora" />
+            <Kpi label="Custo de mão de obra" value={eur(d.totais.custo ?? 0)} sub="executadas × custo/hora + encargos" />
             <Kpi label="Margem bruta" value={<span className={d.totais.margem_pct < 20 ? 'text-warn-fg' : 'text-ok-fg'}>{num(d.totais.margem_pct ?? 0)} %</span>} sub={eur(d.totais.margem ?? 0)} />
           </div>
           {(d.totais.pendentes ?? 0) > 0 && (

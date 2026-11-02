@@ -25,6 +25,19 @@ class Tenant(Base):
     # Parâmetros por organização
     aceitacao_tacita: Mapped[bool] = mapped_column(Boolean, default=True)
     limite_margem_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("20"))
+    # Encargos da agência sobre o custo/hora (TSU, seguro, proporcionais de férias e subsídios),
+    # por tipo de vínculo, em %. Entram no custo das margens; não entram no apuramento salarial.
+    encargos_sem_termo_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("0"), server_default="0")
+    encargos_a_termo_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("0"), server_default="0")
+    encargos_muito_curta_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("0"), server_default="0")
+    encargos_recibos_verdes_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("0"), server_default="0")
+
+    def encargos_pct(self, vinculo: "TipoVinculo") -> Decimal:
+        return {
+            TipoVinculo.sem_termo: self.encargos_sem_termo_pct, TipoVinculo.a_termo: self.encargos_a_termo_pct,
+            TipoVinculo.muito_curta_duracao: self.encargos_muito_curta_pct,
+            TipoVinculo.recibos_verdes: self.encargos_recibos_verdes_pct,
+        }[vinculo] or Decimal("0")
 
 
 class Perfil(str, enum.Enum):
