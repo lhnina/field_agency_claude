@@ -9,6 +9,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
+from app.services.periodos import verificar_editavel
 from app.models import (
     Afetacao, Auditoria, Ausencia, Colaborador, Contrato, EstadoContrato, EstadoOcorrencia, Feriado, LinhaContrato,
     Loja, Ocorrencia, Perfil, TipoVinculo, User,
@@ -201,6 +202,7 @@ def substituir(db: Session, user: User, o: Ocorrencia, colaborador_id: int | Non
     """Altera só esta ocorrência; a afetação de base mantém-se."""
     if o.estado not in EDITAVEIS:
         raise ValueError("Esta ocorrência já foi executada ou validada e não pode ser alterada")
+    verificar_editavel(db, o)
     antes = o.colaborador_id
     if colaborador_id is None or colaborador_id == o.colaborador_previsto_id:
         o.colaborador_efetivo_id = None
@@ -217,6 +219,7 @@ def substituir(db: Session, user: User, o: Ocorrencia, colaborador_id: int | Non
 def mover(db: Session, user: User, o: Ocorrencia, nova_data: date) -> Ocorrencia:
     if o.estado not in EDITAVEIS:
         raise ValueError("Esta ocorrência já foi executada ou validada e não pode ser alterada")
+    verificar_editavel(db, o, nova_data)
     if not linha_ativa(o.linha, nova_data):
         raise ValueError("A nova data está fora da vigência da linha de contrato")
     antes = o.data
@@ -383,6 +386,9 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
             dias_trab = sorted({d for (k, d), _ in horas.items() if k == cid})
             if len(dias_trab) >= 7:
                 alertas.append("Sem dia de descanso semanal")
+            if c.vinculo == TipoVinculo.muito_curta_duracao:
+                from app.services.fecho import indicadores_colaborador  # import local: evita ciclo
+                alertas += [a["texto"] for a in indicadores_colaborador(db, c, date.today())["alertas"]]
         aus = [{"tipo": a.tipo.value, "inicio": a.inicio.isoformat(), "fim": a.fim.isoformat()} for a in ausencias.get(cid, [])]
         linhas_colab.append({
             "id": cid, "nome": c.nome, "numero": c.numero, "vinculo": c.vinculo.value, "funcao": c.funcao,

@@ -8,7 +8,7 @@ const GRUPOS: { titulo?: string; itens: Item[] }[] = [
   { itens: [{ to: '/', icon: 'dash', label: 'Dashboard' }] },
   { titulo: 'Operação', itens: [
     { to: '/planeamento', icon: 'cal', label: 'Planeamento' },
-    { icon: 'check-sq', label: 'Validação de horas' },
+    { to: '/validacao', icon: 'check-sq', label: 'Validação de horas' },
     { to: '/ausencias', icon: 'user-x', label: 'Ausências' },
     { icon: 'truck', label: 'Logística' },
   ] },
@@ -23,8 +23,8 @@ const GRUPOS: { titulo?: string; itens: Item[] }[] = [
   ] },
   { titulo: 'Financeiro', itens: [
     { icon: 'trend', label: 'Rentabilidade' },
-    { icon: 'receipt', label: 'Pré-faturação' },
-    { icon: 'calc', label: 'Apuramentos' },
+    { to: '/prefaturacao', icon: 'receipt', label: 'Pré-faturação' },
+    { to: '/apuramentos', icon: 'calc', label: 'Apuramentos' },
   ] },
 ]
 

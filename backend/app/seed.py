@@ -8,7 +8,7 @@ Palavra-passe de todos: demo1234
 from datetime import date, timedelta
 from decimal import Decimal as D
 
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from app.db import Base, SessionLocal, engine
 from app.models import (
@@ -101,12 +101,15 @@ def run(reset: bool = True) -> None:
                         supervisor_id=users[s].id, custo_hora=D(custo), disponibilidade=disp,
                         email=nome.lower().replace(" ", ".").replace("ç", "c").replace("ê", "e").replace("ã", "a") + "@promovida.pt",
                         data_inicio=date(2025, 2, 3))
+        if vinc == TipoVinculo.muito_curta_duracao:  # contrato atual recente (máx. 35 dias seguidos)
+            c.data_inicio = date.today() - timedelta(days=29 if nome == "Sofia Martins" else 12)
+            c.data_fim_vinculo = c.data_inicio + timedelta(days=34)
         db.add(c)
         cols[nome] = c
     db.flush()
 
     hoje = date.today()
-    desde = hoje - timedelta(days=hoje.weekday() + 14)
+    desde = (hoje.replace(day=1) - timedelta(days=1)).replace(day=1)  # início do mês anterior
     horizonte = hoje + timedelta(days=56)
     marta = users["hugo"]
 
@@ -161,6 +164,27 @@ def run(reset: bool = True) -> None:
     seg = hoje - timedelta(days=hoje.weekday())
     db.add(Ausencia(tenant_id=T, colaborador_id=cols["Carla Sousa"].id, tipo=TipoAusencia.ferias, inicio=seg,
                     fim=seg + timedelta(days=4), observacoes="Férias aprovadas"))
+    db.flush()
+
+    # Execução do mês anterior: aceitação tácita até ontem; validado até 7 dias atrás,
+    # com algumas correções e uma rejeição, para haver casos reais na validação.
+    from app.models import EstadoOcorrencia, Ocorrencia
+    from app.services import fecho
+    fecho.aplicar_aceitacao_tacita(db, T, hoje - timedelta(days=1))
+    passadas = db.scalars(select(Ocorrencia).where(Ocorrencia.tenant_id == T, Ocorrencia.data <= hoje - timedelta(days=7),
+                                                   Ocorrencia.estado == EstadoOcorrencia.executado).order_by(Ocorrencia.id)).all()
+    for i, o in enumerate(passadas):
+        if i % 23 == 5:
+            fecho.registar_execucao(db, users["rui"], o, o.horas_planeadas + D("0.5"), "Reposição de promoção extra", hoje)
+        if i % 41 == 9:
+            fecho.validar(db, users["rui"], [o], False, "Loja fechada para inventário", hoje)
+        else:
+            fecho.validar(db, users["rui"], [o], True, None, hoje)
+    recentes = db.scalars(select(Ocorrencia).where(Ocorrencia.tenant_id == T, Ocorrencia.data > hoje - timedelta(days=7),
+                                                   Ocorrencia.data < hoje, Ocorrencia.estado == EstadoOcorrencia.executado).order_by(Ocorrencia.id)).all()
+    for i, o in enumerate(recentes):
+        if i % 7 == 2:
+            fecho.registar_execucao(db, users["rui"], o, max(o.horas_planeadas - D("1"), D("0")), "Saiu mais cedo (loja sem stock)", hoje)
     db.commit()
     db.close()
     print("Dados de demonstração criados. Utilizadores: marta|hugo|rui|sara|admin@promovida.pt / demo1234")

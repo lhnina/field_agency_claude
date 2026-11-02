@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, useToast } from '../components/ui'
+import { Avatar, Badge, Bar, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, useToast } from '../components/ui'
 import { api } from '../lib/api'
 import { VINCULO, dataCurta, eur } from '../lib/format'
 import type { Colaborador, IdNome, Vinculo } from '../lib/types'
@@ -78,8 +78,8 @@ export default function Colaboradores() {
               </div>
               <Button size="sm" variant="primary" icon="edit" onClick={() => setEdit(atual)}>Editar</Button>
             </div>
-            {atual.vinculo === 'recibos_verdes' && <Aviso>Prestador independente: os serviços são propostos e aceites por ele, sem escala imposta.</Aviso>}
-            {atual.vinculo === 'muito_curta_duracao' && <Aviso>Contrato de muito curta duração: máximo 35 dias seguidos e 70 dias por ano com a agência. O contador chega no próximo incremento.</Aviso>}
+            {atual.vinculo === 'recibos_verdes' && <div className="px-[18px] pb-3"><Aviso>Prestador independente: os serviços são propostos e aceites por ele, sem escala imposta.</Aviso></div>}
+            <Indicadores id={atual.id} vinculo={atual.vinculo} />
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-[18px] py-3.5 border-t border-line-soft">
               {[['Supervisor', nomeSup(atual.supervisor_id)], ['Zona', atual.zona?.nome ?? '—'], ['Início', dataCurta(atual.data_inicio)], ['Custo/hora', eur(atual.custo_hora)],
                 ['Telemóvel', atual.telefone ?? '—'], ['Email', atual.email ?? '—']].map(([k, v]) => (
@@ -98,8 +98,30 @@ export default function Colaboradores() {
   )
 }
 
-function Aviso({ children }: { children: React.ReactNode }) {
-  return <div className="mx-[18px] mb-3.5 rounded-[9px] bg-warn-bg text-[#6B4000] px-3 py-2.5 text-[12.5px] flex gap-2"><Icon name="alert" size={16} />{children}</div>
+type Ind = { dias_trabalhados_ano: number; dias_planeados_ano: number; dias_contrato_atual?: number; alertas: { nivel: string; texto: string }[] }
+function Indicadores({ id, vinculo }: { id: number; vinculo: Vinculo }) {
+  const q = useQuery({ queryKey: ['indicadores', id], queryFn: () => api<Ind>(`/colaboradores/${id}/indicadores`) })
+  if (!q.data) return null
+  const d = q.data
+  const total = d.dias_trabalhados_ano + d.dias_planeados_ano
+  return (
+    <div className="px-[18px] pb-3.5 flex flex-col gap-2.5">
+      {d.alertas.map((a) => <Aviso key={a.texto} erro={a.nivel === 'erro'}>{a.texto}</Aviso>)}
+      {vinculo === 'muito_curta_duracao' && (
+        <div className="grid grid-cols-2 gap-3">
+          <div><div className="text-xs text-ink-60">Dias no ano (máx. 70)</div><div className="text-[15px] font-semibold num">{d.dias_trabalhados_ano} trabalhados + {d.dias_planeados_ano} planeados</div>
+            <div className="mt-1"><Bar pct={(total / 70) * 100} tone={total > 70 ? 'err' : total >= 56 ? 'warn' : 'ok'} /></div></div>
+          <div><div className="text-xs text-ink-60">Contrato atual (máx. 35 dias)</div><div className="text-[15px] font-semibold num">{d.dias_contrato_atual ?? 0} dias</div>
+            <div className="mt-1"><Bar pct={((d.dias_contrato_atual ?? 0) / 35) * 100} tone={(d.dias_contrato_atual ?? 0) > 35 ? 'err' : (d.dias_contrato_atual ?? 0) >= 28 ? 'warn' : 'ok'} /></div></div>
+        </div>
+      )}
+      {vinculo !== 'muito_curta_duracao' && <div className="text-[12.5px] text-ink-60">{d.dias_trabalhados_ano} dias com serviço em {new Date().getFullYear()} · {d.dias_planeados_ano} planeados até ao fim do ano</div>}
+    </div>
+  )
+}
+
+function Aviso({ children, erro }: { children: React.ReactNode; erro?: boolean }) {
+  return <div className={`rounded-[9px] px-3 py-2.5 text-[12.5px] flex gap-2 ${erro ? 'bg-err-bg text-err-fg' : 'bg-warn-bg text-[#6B4000]'}`}><Icon name="alert" size={16} />{children}</div>
 }
 
 function Disp({ d, big }: { d: string; big?: boolean }) {

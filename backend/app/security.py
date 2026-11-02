@@ -50,6 +50,12 @@ PERMISSOES: dict[str, set[Perfil]] = {
     "planeamento.ler": {Perfil.administrador, Perfil.direcao, Perfil.gestor, Perfil.supervisor},
     "planeamento.editar": {Perfil.administrador, Perfil.gestor, Perfil.supervisor},
     "ausencias.editar": {Perfil.administrador, Perfil.gestor, Perfil.supervisor, Perfil.rh},
+    # Q5: supervisor e gestor validam horas
+    "validacao.ler": {Perfil.administrador, Perfil.direcao, Perfil.gestor, Perfil.supervisor, Perfil.financeiro, Perfil.rh},
+    "validacao.editar": {Perfil.administrador, Perfil.gestor, Perfil.supervisor},
+    "financeiro.ler": {Perfil.administrador, Perfil.direcao, Perfil.gestor, Perfil.financeiro},
+    "remuneracoes.ler": {Perfil.administrador, Perfil.direcao, Perfil.gestor, Perfil.financeiro, Perfil.rh},
+    "periodo.fechar": {Perfil.administrador, Perfil.direcao, Perfil.financeiro},
 }
 
 

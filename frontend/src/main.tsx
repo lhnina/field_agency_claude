@@ -14,6 +14,9 @@ import ContratoDetalhe from './pages/ContratoDetalhe'
 import Colaboradores from './pages/Colaboradores'
 import ClientesLojas from './pages/ClientesLojas'
 import Ausencias from './pages/Ausencias'
+import Validacao from './pages/Validacao'
+import PreFaturacao from './pages/PreFaturacao'
+import Apuramentos from './pages/Apuramentos'
 import type { ReactNode } from 'react'
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 } } })
@@ -37,6 +40,9 @@ createRoot(document.getElementById('root')!).render(
               <Route path="contratos/:id" element={<ContratoDetalhe />} />
               <Route path="colaboradores" element={<Colaboradores />} />
               <Route path="clientes" element={<ClientesLojas />} />
+              <Route path="validacao" element={<Validacao />} />
+              <Route path="prefaturacao" element={<PreFaturacao />} />
+              <Route path="apuramentos" element={<Apuramentos />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>
