@@ -219,7 +219,14 @@ class EstadoOcorrencia(str, enum.Enum):
     confirmado = "confirmado"
     executado = "executado"
     validado = "validado"
+    rejeitado = "rejeitado"    # não realizado: 0 horas faturáveis/remuneráveis
     cancelado = "cancelado"
+
+
+class OrigemExecucao(str, enum.Enum):
+    registo = "registo"   # registado pelo colaborador (app, fase 3)
+    manual = "manual"     # registado/corrigido no backoffice
+    tacita = "tacita"     # aceitação tácita: sem registo = horas planeadas (Q4)
 
 
 class Ocorrencia(TenantMixin, Base):
@@ -238,6 +245,10 @@ class Ocorrencia(TenantMixin, Base):
     motivo_alteracao: Mapped[str | None] = mapped_column(String(200))
     reagendada_feriado: Mapped[bool] = mapped_column(Boolean, default=False)
     estado: Mapped[EstadoOcorrencia] = mapped_column(Enum(EstadoOcorrencia, name="estado_ocorrencia"), default=EstadoOcorrencia.planeado)
+    origem_execucao: Mapped[OrigemExecucao | None] = mapped_column(Enum(OrigemExecucao, name="origem_execucao"))
+    observacao_execucao: Mapped[str | None] = mapped_column(String(250))
+    validado_por_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    validado_em: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     linha: Mapped[LinhaContrato] = relationship()
     colaborador_previsto: Mapped[Colaborador | None] = relationship(foreign_keys=[colaborador_previsto_id])
     colaborador_efetivo: Mapped[Colaborador | None] = relationship(foreign_keys=[colaborador_efetivo_id])
@@ -264,6 +275,25 @@ class Ausencia(TenantMixin, Base):
     aprovada: Mapped[bool] = mapped_column(Boolean, default=True)
     observacoes: Mapped[str | None] = mapped_column(String(200))
     colaborador: Mapped[Colaborador] = relationship()
+
+
+class TipoPeriodo(str, enum.Enum):
+    faturacao = "faturacao"
+    remuneracao = "remuneracao"
+
+
+class PeriodoFechado(TenantMixin, Base):
+    """Fecho mensal. Faturação fecha por área; remuneração fecha o mês inteiro.
+    Depois do fecho, as ocorrências abrangidas ficam imutáveis (R10/R11)."""
+
+    __tablename__ = "periodos_fechados"
+    __table_args__ = (UniqueConstraint("tenant_id", "tipo", "area", "mes", name="uq_periodo"),)
+    id: Mapped[int] = IdCol()
+    tipo: Mapped[TipoPeriodo] = mapped_column(Enum(TipoPeriodo, name="tipo_periodo"))
+    area: Mapped[str] = mapped_column(String(3), default="*")  # REP/PRO/LOG/EQF ou * (remuneração)
+    mes: Mapped[date] = mapped_column(Date)  # primeiro dia do mês
+    fechado_por_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    resumo: Mapped[str | None] = mapped_column(Text)  # snapshot JSON dos totais no momento do fecho
 
 
 class Feriado(Base):
