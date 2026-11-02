@@ -1,0 +1,45 @@
+// Percorre a aplicação como gestor e guarda capturas; termina com erro se algo falhar.
+const { chromium } = require('playwright')
+const out = process.argv[2] || '/tmp/shots'
+;(async () => {
+  const b = await chromium.launch()
+  const p = await b.newPage({ viewport: { width: 1440, height: 900 } })
+  const errors = []
+  p.on('pageerror', (e) => errors.push('pageerror: ' + e.message))
+  p.on('console', (m) => { if (m.type() === 'error') errors.push('console: ' + m.text()) })
+  await p.goto('http://localhost:5173/login')
+  await p.fill('input[type=email]', 'hugo@promovida.pt')
+  await p.fill('input[type=password]', 'demo1234')
+  await p.click('button[type=submit]')
+  await p.waitForURL('http://localhost:5173/')
+  await p.waitForSelector('text=Faturação mensal prevista')
+  await p.screenshot({ path: `${out}/1-dashboard.png`, fullPage: true })
+
+  await p.goto('http://localhost:5173/planeamento')
+  await p.waitForSelector('[role=grid]')
+  await p.screenshot({ path: `${out}/2-planeamento.png`, fullPage: true })
+  // arrastar o primeiro turno "por atribuir" para o primeiro colaborador, mesmo dia
+  const cards = p.locator('[role=grid] button[draggable=true]')
+  const n = await cards.count()
+  console.log('turnos visíveis', n)
+
+  await p.goto('http://localhost:5173/contratos')
+  await p.waitForSelector('table')
+  await p.screenshot({ path: `${out}/3-contratos.png`, fullPage: true })
+  await p.click('table tbody tr >> nth=0')
+  await p.waitForSelector('text=Linhas por loja')
+  await p.screenshot({ path: `${out}/4-contrato.png`, fullPage: true })
+
+  await p.goto('http://localhost:5173/colaboradores')
+  await p.waitForSelector('table')
+  await p.screenshot({ path: `${out}/5-colaboradores.png`, fullPage: true })
+  await p.goto('http://localhost:5173/ausencias')
+  await p.waitForSelector('table')
+  await p.screenshot({ path: `${out}/6-ausencias.png`, fullPage: true })
+  await p.goto('http://localhost:5173/clientes')
+  await p.waitForSelector('table')
+  await p.screenshot({ path: `${out}/7-lojas.png`, fullPage: true })
+  console.log(errors.length ? errors.join('\n') : 'sem erros na consola')
+  await b.close()
+  if (errors.length) process.exit(1)
+})().catch((e) => { console.error(e); process.exit(1) })

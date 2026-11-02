@@ -1,0 +1,407 @@
+"""Regras de negócio do núcleo operacional: geração de ocorrências, afetação
+persistente, substituições, ausências e vista semanal de planeamento."""
+import json
+from dataclasses import dataclass, field
+from datetime import date, timedelta
+from decimal import ROUND_HALF_UP, Decimal
+
+from sqlalchemy import and_, or_, select
+from sqlalchemy.orm import Session, joinedload
+
+from app.config import settings
+from app.models import (
+    Afetacao, Auditoria, Ausencia, Colaborador, Contrato, EstadoContrato, EstadoOcorrencia, Feriado, LinhaContrato,
+    Loja, Ocorrencia, Perfil, TipoVinculo, User,
+)
+
+SEMANAS_POR_MES = Decimal(52) / Decimal(12)
+EDITAVEIS = (EstadoOcorrencia.planeado, EstadoOcorrencia.atribuido, EstadoOcorrencia.confirmado)
+
+
+def q2(v: Decimal) -> Decimal:
+    return v.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+# ------------------------------------------------------------------ valores
+def horas_mes_linha(linha: LinhaContrato) -> Decimal:
+    """Horas contratadas por mês = horas/semana × 52 ÷ 12 (resposta Q3)."""
+    return q2(linha.horas_semana * SEMANAS_POR_MES)
+
+
+def valor_mensal_linha(linha: LinhaContrato) -> Decimal:
+    return q2(linha.horas_semana * SEMANAS_POR_MES * linha.preco_hora)
+
+
+def linha_ativa(linha: LinhaContrato, d: date) -> bool:
+    c = linha.contrato
+    return (
+        linha.inicio <= d
+        and (linha.fim is None or d <= linha.fim)
+        and c.inicio <= d
+        and (c.fim is None or d <= c.fim)
+    )
+
+
+def proximo_numero(db: Session, tenant_id: int, tipo: str, ano: int) -> str:
+    prefixo = f"CT-{tipo}-{ano}/"
+    existentes = db.scalars(
+        select(Contrato.numero).where(Contrato.tenant_id == tenant_id, Contrato.numero.like(prefixo + "%"))
+    ).all()
+    seq = max((int(n.split("/")[1]) for n in existentes), default=0) + 1
+    return f"{prefixo}{seq:04d}"
+
+
+def auditar(db: Session, user: User | None, entidade: str, entidade_id: int, acao: str, detalhe: dict | None = None,
+            tenant_id: int | None = None) -> None:
+    db.add(Auditoria(
+        tenant_id=tenant_id or user.tenant_id, user_id=user.id if user else None, entidade=entidade,
+        entidade_id=entidade_id, acao=acao, detalhe=json.dumps(detalhe, default=str, ensure_ascii=False) if detalhe else None,
+    ))
+
+
+# ------------------------------------------------------------------ afetação
+def afetacao_em(linha: LinhaContrato, d: date) -> Afetacao | None:
+    for a in linha.afetacoes:
+        if a.desde <= d and (a.ate is None or d <= a.ate):
+            return a
+    return None
+
+
+def feriados_entre(db: Session, tenant_id: int, ini: date, fim: date) -> set[date]:
+    rows = db.scalars(select(Feriado.data).where(
+        Feriado.data.between(ini, fim), or_(Feriado.tenant_id.is_(None), Feriado.tenant_id == tenant_id)
+    )).all()
+    return set(rows)
+
+
+def _dia_reagendado(linha: LinhaContrato, d: date, feriados: set[date], fim: date) -> date | None:
+    """Feriado ou loja fechada: o serviço passa para outro dia (resposta Q9).
+    Preferência: próximo dia útil (seg–sáb) da mesma semana sem horas na linha;
+    depois qualquer dia útil seguinte; por fim o dia útil anterior."""
+    candidatos = [d + timedelta(days=i) for i in range(1, 7)]
+    candidatos = [c for c in candidatos if c <= fim and c.weekday() < 6 and c not in feriados]
+    mesma_semana = [c for c in candidatos if c.isocalendar()[1] == d.isocalendar()[1]]
+    for lista in (
+        [c for c in mesma_semana if linha.horas_dia(c.weekday()) == 0],
+        [c for c in candidatos if linha.horas_dia(c.weekday()) == 0],
+        candidatos,
+    ):
+        if lista:
+            return lista[0]
+    for i in range(1, 7):
+        c = d - timedelta(days=i)
+        if c.weekday() < 6 and c not in feriados and c >= linha.inicio:
+            return c
+    return None
+
+
+def gerar_ocorrencias(db: Session, linha: LinhaContrato, ate: date, desde: date | None = None) -> int:
+    """Gera (de forma idempotente) as ocorrências de uma linha até `ate`."""
+    c = linha.contrato
+    if c.estado != EstadoContrato.ativo:
+        return 0
+    ini = max(linha.inicio, c.inicio, desde or linha.inicio)
+    fim = min(x for x in (ate, linha.fim, c.fim) if x is not None)
+    if fim < ini:
+        return 0
+    feriados = feriados_entre(db, linha.tenant_id, ini, fim + timedelta(days=7))
+    existentes = set(db.scalars(select(Ocorrencia.data_original).where(
+        Ocorrencia.linha_id == linha.id, Ocorrencia.data_original.between(ini, fim))).all())
+    criadas = 0
+    d = ini
+    while d <= fim:
+        h = linha.horas_dia(d.weekday())
+        if h > 0 and d not in existentes:
+            alvo, reag = d, False
+            if d in feriados:
+                alvo, reag = _dia_reagendado(linha, d, feriados, fim + timedelta(days=6)), True
+            if alvo is not None:
+                af = afetacao_em(linha, alvo)
+                db.add(Ocorrencia(
+                    tenant_id=linha.tenant_id, linha_id=linha.id, data=alvo, data_original=d, hora_inicio=linha.hora_inicio,
+                    horas_planeadas=h, reagendada_feriado=reag,
+                    colaborador_previsto_id=af.colaborador_id if af else None,
+                    estado=EstadoOcorrencia.atribuido if af else EstadoOcorrencia.planeado,
+                ))
+                criadas += 1
+        d += timedelta(days=1)
+    db.flush()
+    return criadas
+
+
+def regenerar_futuras(db: Session, linha: LinhaContrato, desde: date, ate: date) -> int:
+    """Depois de alterar horas/datas de uma linha: apaga ocorrências futuras ainda
+    não executadas e volta a gerar. Substituições futuras nessas datas perdem-se."""
+    for o in db.scalars(select(Ocorrencia).where(
+            Ocorrencia.linha_id == linha.id, Ocorrencia.data_original >= desde, Ocorrencia.estado.in_(EDITAVEIS))).all():
+        db.delete(o)
+    db.flush()
+    return gerar_ocorrencias(db, linha, ate=ate, desde=desde)
+
+
+def afetar(db: Session, user: User, linha: LinhaContrato, colaborador: Colaborador, desde: date, ate: date | None = None) -> Afetacao:
+    """Afetação persistente: o colaborador fica na linha desde `desde` até `ate`
+    (por defeito até ao fim). Fecha a afetação anterior e atualiza as ocorrências."""
+    if ate is not None and ate < desde:
+        raise ValueError("A data de fim é anterior à data de início")
+    for a in list(linha.afetacoes):
+        if a.desde >= desde and (ate is None or a.desde <= ate):
+            linha.afetacoes.remove(a)
+            db.delete(a)
+        elif a.desde < desde and (a.ate is None or a.ate >= desde):
+            if ate is not None and (a.ate is None or a.ate > ate):
+                # afetação temporária no meio de outra: a anterior retoma depois
+                linha.afetacoes.append(Afetacao(tenant_id=linha.tenant_id, colaborador_id=a.colaborador_id,
+                                                desde=ate + timedelta(days=1), ate=a.ate))
+            a.ate = desde - timedelta(days=1)
+    nova = Afetacao(tenant_id=linha.tenant_id, colaborador_id=colaborador.id, desde=desde, ate=ate)
+    linha.afetacoes.append(nova)
+    linha.afetacoes.sort(key=lambda x: x.desde)
+    db.flush()
+
+    cond = [Ocorrencia.linha_id == linha.id, Ocorrencia.data >= desde, Ocorrencia.estado.in_(EDITAVEIS)]
+    if ate is not None:
+        cond.append(Ocorrencia.data <= ate)
+    for o in db.scalars(select(Ocorrencia).where(*cond)).all():
+        o.colaborador_previsto_id = colaborador.id
+        if o.colaborador_efetivo_id == colaborador.id:
+            o.colaborador_efetivo_id = None
+            o.motivo_alteracao = None
+        o.estado = EstadoOcorrencia.atribuido
+    # Se havia uma afetação temporária a terminar, as datas seguintes voltam ao titular
+    if ate is not None:
+        for o in db.scalars(select(Ocorrencia).where(
+                Ocorrencia.linha_id == linha.id, Ocorrencia.data > ate, Ocorrencia.estado.in_(EDITAVEIS))).all():
+            af = afetacao_em(linha, o.data)
+            o.colaborador_previsto_id = af.colaborador_id if af else None
+            o.estado = EstadoOcorrencia.atribuido if af else EstadoOcorrencia.planeado
+    auditar(db, user, "linha_contrato", linha.id, "afetacao",
+            {"colaborador_id": colaborador.id, "desde": desde, "ate": ate})
+    db.flush()
+    return nova
+
+
+def remover_afetacao(db: Session, user: User, linha: LinhaContrato, desde: date) -> None:
+    """Termina a afetação em vigor a partir de `desde`: as ocorrências ficam por atribuir."""
+    for a in list(linha.afetacoes):
+        if a.desde >= desde:
+            linha.afetacoes.remove(a)
+            db.delete(a)
+        elif a.ate is None or a.ate >= desde:
+            a.ate = desde - timedelta(days=1)
+    for o in db.scalars(select(Ocorrencia).where(
+            Ocorrencia.linha_id == linha.id, Ocorrencia.data >= desde, Ocorrencia.estado.in_(EDITAVEIS))).all():
+        o.colaborador_previsto_id = None
+        o.estado = EstadoOcorrencia.planeado if o.colaborador_efetivo_id is None else o.estado
+    auditar(db, user, "linha_contrato", linha.id, "remover_afetacao", {"desde": desde})
+    db.flush()
+
+
+def substituir(db: Session, user: User, o: Ocorrencia, colaborador_id: int | None, motivo: str | None) -> Ocorrencia:
+    """Altera só esta ocorrência; a afetação de base mantém-se."""
+    if o.estado not in EDITAVEIS:
+        raise ValueError("Esta ocorrência já foi executada ou validada e não pode ser alterada")
+    antes = o.colaborador_id
+    if colaborador_id is None or colaborador_id == o.colaborador_previsto_id:
+        o.colaborador_efetivo_id = None
+        o.motivo_alteracao = None
+    else:
+        o.colaborador_efetivo_id = colaborador_id
+        o.motivo_alteracao = motivo or "Substituição"
+    o.estado = EstadoOcorrencia.atribuido if o.colaborador_id else EstadoOcorrencia.planeado
+    auditar(db, user, "ocorrencia", o.id, "substituicao", {"de": antes, "para": o.colaborador_id, "motivo": motivo})
+    db.flush()
+    return o
+
+
+def mover(db: Session, user: User, o: Ocorrencia, nova_data: date) -> Ocorrencia:
+    if o.estado not in EDITAVEIS:
+        raise ValueError("Esta ocorrência já foi executada ou validada e não pode ser alterada")
+    if not linha_ativa(o.linha, nova_data):
+        raise ValueError("A nova data está fora da vigência da linha de contrato")
+    antes = o.data
+    o.data = nova_data
+    auditar(db, user, "ocorrencia", o.id, "mover", {"de": antes, "para": nova_data})
+    db.flush()
+    return o
+
+
+def ocorrencias_afetadas(db: Session, aus: Ausencia) -> list[Ocorrencia]:
+    return db.scalars(select(Ocorrencia).options(joinedload(Ocorrencia.linha).joinedload(LinhaContrato.loja)).where(
+        Ocorrencia.tenant_id == aus.tenant_id,
+        Ocorrencia.data.between(aus.inicio, aus.fim),
+        Ocorrencia.estado.in_(EDITAVEIS),
+        or_(Ocorrencia.colaborador_efetivo_id == aus.colaborador_id,
+            and_(Ocorrencia.colaborador_efetivo_id.is_(None), Ocorrencia.colaborador_previsto_id == aus.colaborador_id)),
+    ).order_by(Ocorrencia.data)).unique().all()
+
+
+# ------------------------------------------------------------------ carga e candidatos
+def _horas_por_colaborador(db: Session, tenant_id: int, ini: date, fim: date) -> dict[tuple[int, date], Decimal]:
+    rows = db.execute(select(Ocorrencia.colaborador_efetivo_id, Ocorrencia.colaborador_previsto_id, Ocorrencia.data,
+                             Ocorrencia.horas_planeadas).where(
+        Ocorrencia.tenant_id == tenant_id, Ocorrencia.data.between(ini, fim),
+        Ocorrencia.estado != EstadoOcorrencia.cancelado)).all()
+    out: dict[tuple[int, date], Decimal] = {}
+    for ef, pr, d, h in rows:
+        cid = ef or pr
+        if cid:
+            out[(cid, d)] = out.get((cid, d), Decimal("0")) + h
+    return out
+
+
+def _ausentes(db: Session, tenant_id: int, ini: date, fim: date) -> dict[int, list[Ausencia]]:
+    out: dict[int, list[Ausencia]] = {}
+    for a in db.scalars(select(Ausencia).where(Ausencia.tenant_id == tenant_id, Ausencia.aprovada.is_(True),
+                                               Ausencia.inicio <= fim, Ausencia.fim >= ini)).all():
+        out.setdefault(a.colaborador_id, []).append(a)
+    return out
+
+
+def candidatos(db: Session, o: Ocorrencia, limite: int = 8) -> list[dict]:
+    """Sugestão explicável de substitutos. Nunca impede a escolha manual."""
+    loja = o.linha.loja
+    seg = o.data - timedelta(days=o.data.weekday())
+    horas = _horas_por_colaborador(db, o.tenant_id, seg, seg + timedelta(days=6))
+    ausentes = _ausentes(db, o.tenant_id, o.data, o.data)
+    res = []
+    for c in db.scalars(select(Colaborador).where(Colaborador.tenant_id == o.tenant_id, Colaborador.ativo.is_(True))).all():
+        if c.id == o.colaborador_id:
+            continue
+        motivos, pontos, bloqueios = [], 0, []
+        if c.id in ausentes:
+            bloqueios.append("Ausente nesta data")
+        if c.disponibilidade[o.data.weekday()] == "1":
+            pontos += 3
+            motivos.append("Disponível neste dia da semana")
+        else:
+            bloqueios.append("Indisponível neste dia da semana")
+        if loja.zona_id and c.zona_id == loja.zona_id:
+            pontos += 2
+            motivos.append("Mesma zona da loja")
+        dia = horas.get((c.id, o.data), Decimal("0"))
+        semana = sum((v for (cid, _), v in horas.items() if cid == c.id), Decimal("0"))
+        if c.vinculo != TipoVinculo.recibos_verdes:
+            if dia + o.horas_planeadas > Decimal(str(settings.limite_horas_dia)):
+                bloqueios.append(f"Excederia {settings.limite_horas_dia:g} h no dia ({dia + o.horas_planeadas} h)")
+            if semana + o.horas_planeadas > Decimal(str(settings.limite_horas_semana)):
+                bloqueios.append(f"Excederia {settings.limite_horas_semana:g} h na semana")
+        pontos += 1 if semana < 20 else 0
+        res.append({"colaborador_id": c.id, "nome": c.nome, "vinculo": c.vinculo.value, "horas_dia": float(dia),
+                    "horas_semana": float(semana), "pontos": pontos - 10 * len(bloqueios), "motivos": motivos,
+                    "alertas": bloqueios})
+    res.sort(key=lambda r: (-r["pontos"], r["horas_semana"]))
+    return res[:limite]
+
+
+# ------------------------------------------------------------------ vista semanal
+@dataclass
+class FiltroPlaneamento:
+    zona_id: int | None = None
+    cliente_id: int | None = None
+    supervisor_id: int | None = None
+    tipo: str | None = None
+    colaborador_ids: list[int] = field(default_factory=list)
+
+
+def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneamento) -> dict:
+    dom = segunda + timedelta(days=6)
+    q = (select(Ocorrencia)
+         .join(LinhaContrato, Ocorrencia.linha_id == LinhaContrato.id)
+         .join(Contrato, LinhaContrato.contrato_id == Contrato.id)
+         .join(Loja, LinhaContrato.loja_id == Loja.id)
+         .options(joinedload(Ocorrencia.linha).joinedload(LinhaContrato.loja),
+                  joinedload(Ocorrencia.linha).joinedload(LinhaContrato.contrato).joinedload(Contrato.cliente))
+         .where(Ocorrencia.tenant_id == user.tenant_id, Ocorrencia.data.between(segunda, dom),
+                Ocorrencia.estado != EstadoOcorrencia.cancelado))
+    if f.zona_id:
+        q = q.where(Loja.zona_id == f.zona_id)
+    if f.cliente_id:
+        q = q.where(Contrato.cliente_id == f.cliente_id)
+    if f.tipo:
+        q = q.where(Contrato.tipo == f.tipo)
+    ocorrencias = db.scalars(q.order_by(Ocorrencia.data, Ocorrencia.hora_inicio)).unique().all()
+
+    sup = user.id if user.perfil == Perfil.supervisor else f.supervisor_id
+    colabs_q = select(Colaborador).where(Colaborador.tenant_id == user.tenant_id, Colaborador.ativo.is_(True))
+    if sup:
+        colabs_q = colabs_q.where(Colaborador.supervisor_id == sup)
+    equipa = {c.id: c for c in db.scalars(colabs_q).all()} if sup else None
+
+    if equipa is not None:
+        ocorrencias = [o for o in ocorrencias if (o.colaborador_id in equipa)
+                       or (o.colaborador_id is None and o.linha.loja.supervisor_id == sup)]
+
+    ids = {o.colaborador_id for o in ocorrencias if o.colaborador_id}
+    if equipa is not None:
+        ids |= set(equipa)
+    colabs = {c.id: c for c in db.scalars(select(Colaborador).where(Colaborador.id.in_(ids))).all()} if ids else {}
+    ausencias = _ausentes(db, user.tenant_id, segunda, dom)
+
+    horas: dict[tuple[int, date], Decimal] = {}
+    for o in ocorrencias:
+        if o.colaborador_id:
+            k = (o.colaborador_id, o.data)
+            horas[k] = horas.get(k, Decimal("0")) + o.horas_planeadas
+
+    def aus_em(cid: int, d: date) -> Ausencia | None:
+        return next((a for a in ausencias.get(cid, []) if a.inicio <= d <= a.fim), None)
+
+    def oc_json(o: Ocorrencia) -> dict:
+        alertas = []
+        cid = o.colaborador_id
+        if cid is None:
+            alertas.append("sem_colaborador")
+        else:
+            if aus_em(cid, o.data):
+                alertas.append("colaborador_ausente")
+            c = colabs.get(cid)
+            if c and c.vinculo != TipoVinculo.recibos_verdes and horas.get((cid, o.data), 0) > Decimal(str(settings.limite_horas_dia)):
+                alertas.append("excede_horas_dia")
+        ln = o.linha
+        return {
+            "id": o.id, "data": o.data.isoformat(), "data_original": o.data_original.isoformat(),
+            "reagendada_feriado": o.reagendada_feriado, "hora_inicio": o.hora_inicio,
+            "horas": float(o.horas_planeadas), "estado": o.estado.value,
+            "colaborador_id": cid, "colaborador_previsto_id": o.colaborador_previsto_id,
+            "substituicao": o.colaborador_efetivo_id is not None, "motivo": o.motivo_alteracao,
+            "linha_id": ln.id, "contrato_id": ln.contrato_id, "contrato_numero": ln.contrato.numero,
+            "tipo": ln.contrato.tipo.value, "cliente": ln.contrato.cliente.nome, "loja": ln.loja.nome,
+            "loja_id": ln.loja_id, "mecanica": ln.mecanica, "alertas": alertas,
+        }
+
+    linhas_colab = []
+    for cid, c in sorted(colabs.items(), key=lambda kv: kv[1].nome):
+        tot = sum((v for (k, _), v in horas.items() if k == cid), Decimal("0"))
+        alertas = []
+        if c.vinculo != TipoVinculo.recibos_verdes:
+            if tot > Decimal(str(settings.limite_horas_semana)):
+                alertas.append(f"Excede {settings.limite_horas_semana:g} h na semana ({tot} h)")
+            for (k, d), v in horas.items():
+                if k == cid and v > Decimal(str(settings.limite_horas_dia)):
+                    alertas.append(f"{v} h em {d.strftime('%d/%m')} (limite {settings.limite_horas_dia:g} h)")
+            dias_trab = sorted({d for (k, d), _ in horas.items() if k == cid})
+            if len(dias_trab) >= 7:
+                alertas.append("Sem dia de descanso semanal")
+        aus = [{"tipo": a.tipo.value, "inicio": a.inicio.isoformat(), "fim": a.fim.isoformat()} for a in ausencias.get(cid, [])]
+        linhas_colab.append({
+            "id": cid, "nome": c.nome, "numero": c.numero, "vinculo": c.vinculo.value, "funcao": c.funcao,
+            "horas_semana": float(tot), "limite_semana": None if c.vinculo == TipoVinculo.recibos_verdes else settings.limite_horas_semana,
+            "alertas": alertas, "ausencias": aus, "disponibilidade": c.disponibilidade,
+        })
+
+    oc = [oc_json(o) for o in ocorrencias]
+    return {
+        "inicio": segunda.isoformat(), "fim": dom.isoformat(),
+        "dias": [(segunda + timedelta(days=i)).isoformat() for i in range(7)],
+        "colaboradores": linhas_colab,
+        "ocorrencias": [o for o in oc if o["colaborador_id"] is not None],
+        "por_atribuir": [o for o in oc if o["colaborador_id"] is None],
+        "resumo": {
+            "total": len(oc),
+            "por_atribuir": sum(1 for o in oc if o["colaborador_id"] is None),
+            "conflitos": sum(1 for o in oc if {"colaborador_ausente", "excede_horas_dia"} & set(o["alertas"])),
+            "ausencias": sum(len(v) for k, v in ausencias.items() if k in colabs),
+            "horas": float(sum((o.horas_planeadas for o in ocorrencias), Decimal("0"))),
+        },
+    }
