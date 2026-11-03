@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { MinhaSenhaDialog } from '../pages/Utilizadores'
 import simbolo from '../assets/argos-simbolo.png'
+import wordmark from '../assets/argos-wordmark.png'
 import { session } from '../lib/api'
 import { Avatar, Icon } from './ui'
 import type { IconName } from './ui'
@@ -45,7 +46,7 @@ export default function Layout() {
       <nav aria-label="Menu principal" className="flex-[1_0_248px] max-w-sidebar bg-petrol-900 text-[#C9D6D3] flex flex-col px-3 pt-[18px] pb-3.5">
         <div className="flex items-center gap-3 px-2 pb-3.5">
           <img src={simbolo} alt="" className="w-11 h-11 flex-none" />
-          <div className="leading-tight"><div className="text-white text-[17px] font-bold tracking-[.14em]">ARGOS</div><div className="text-xs text-[#93AAA6]">Gestão operacional</div></div>
+          <div className="leading-tight"><img src={wordmark} alt="Argos" className="h-[15px] w-auto mb-1" /><div className="text-xs text-[#93AAA6]">Gestão operacional</div></div>
         </div>
         {GRUPOS.map((g, i) => (
           <div key={i} className="mt-3">
