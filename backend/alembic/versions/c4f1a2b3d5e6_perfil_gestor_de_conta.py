@@ -26,7 +26,7 @@ def upgrade() -> None:
     # O texto livre anterior passa para a ligação ao utilizador quando o nome ou email coincide.
     op.execute("""
         UPDATE clientes c SET gestor_conta_id = u.id FROM users u
-        WHERE u.tenant_id = c.tenant_id AND c.gestor_conta IS NOT NULL
+        WHERE u.tenant_id = c.tenant_id AND c.gestor_conta IS NOT NULL AND u.perfil = 'gestor_conta'
           AND (lower(trim(c.gestor_conta)) = lower(u.nome) OR lower(trim(c.gestor_conta)) = lower(u.email))
     """)
     op.drop_column('clientes', 'gestor_conta')
