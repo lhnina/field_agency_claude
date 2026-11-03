@@ -260,7 +260,7 @@ def remover_afetacao(lid: int, desde: date, user: User = Depends(requer("planeam
 def gerar(cid: int, body: GerarIn, user: User = Depends(requer("contratos.editar")), db: Session = Depends(get_db)):
     c = _carregar(db, cid, user)
     if c.estado != EstadoContrato.ativo:
-        raise HTTPException(422, "Só contratos ativos geram ocorrências")
+        raise HTTPException(422, "Só contratos em curso geram ocorrências")
     n = sum(op.gerar_ocorrencias(db, ln, ate=body.ate or _horizonte()) for ln in c.linhas)
     db.commit()
     return {"criadas": n}

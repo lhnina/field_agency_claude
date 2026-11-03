@@ -84,12 +84,12 @@ def dashboard(user: User = Depends(requer("planeamento.ler")), db: Session = Dep
     horas_mes = sum((op.horas_mes_linha(ln) for c in contratos for ln in c.linhas if ln.fim is None or ln.fim >= hoje), Decimal("0"))
     ini_mes = hoje.replace(day=1)
     prox = (ini_mes + timedelta(days=32)).replace(day=1)
-    sp = select(func.coalesce(func.sum(Ocorrencia.horas_planeadas), 0)).where(
+    sp = select(func.coalesce(func.sum(Ocorrencia.horas_planeadas), 0)).join(
+        LinhaContrato, Ocorrencia.linha_id == LinhaContrato.id).join(Contrato, LinhaContrato.contrato_id == Contrato.id).where(
         Ocorrencia.tenant_id == user.tenant_id, Ocorrencia.data >= ini_mes, Ocorrencia.data < prox,
-        Ocorrencia.estado != EstadoOcorrencia.cancelado)
+        Ocorrencia.estado != EstadoOcorrencia.cancelado, Contrato.estado == EstadoContrato.ativo)
     if permitidos is not None:
-        sp = sp.join(LinhaContrato, Ocorrencia.linha_id == LinhaContrato.id).join(
-            Contrato, LinhaContrato.contrato_id == Contrato.id).where(Contrato.cliente_id.in_(permitidos))
+        sp = sp.where(Contrato.cliente_id.in_(permitidos))
     planeadas = db.scalar(sp)
     a_terminar = [c for c in contratos if c.fim and hoje <= c.fim <= hoje + timedelta(days=30)]
     from app.api.documentos import _colabs_ambito

@@ -225,7 +225,7 @@ def _marcas(db: Session, c: Cliente, nomes: list[str], tenant_id: int) -> None:
         if m.ativo and k not in pedidas and m.id:
             n = _contratos_vivos(db, Contrato.marca_id == m.id)
             if n:
-                raise HTTPException(422, f"A marca {m.nome} tem {n} contrato(s) ativo(s) ou em proposta e não pode ser retirada")
+                raise HTTPException(422, f"A marca {m.nome} tem {n} contrato(s) em curso ou em orçamento e não pode ser retirada")
             m.ativo = False
 
 
@@ -261,7 +261,7 @@ def estado_cliente(cid: int, body: EstadoAtivoIn, user: User = Depends(requer("d
     c = obter(db, Cliente, cid, user)
     n = _contratos_vivos(db, Contrato.cliente_id == c.id)
     return _estado(db, user, c, body.ativo, "cliente",
-                   f"O cliente tem {n} contrato(s) ativo(s) ou em proposta: termine-os antes de o desativar" if n else None)
+                   f"O cliente tem {n} contrato(s) em curso ou em orçamento: termine-os antes de o desativar" if n else None)
 
 
 @router.post("/marcas/{mid}/estado", tags=["dados mestre"])
@@ -269,7 +269,7 @@ def estado_marca(mid: int, body: EstadoAtivoIn, user: User = Depends(requer("dad
     m = obter(db, Marca, mid, user)
     n = _contratos_vivos(db, Contrato.marca_id == m.id)
     _estado(db, user, m, body.ativo, "marca",
-            f"A marca tem {n} contrato(s) ativo(s) ou em proposta" if n else None)
+            f"A marca tem {n} contrato(s) em curso ou em orçamento" if n else None)
     return {"id": m.id, "ativo": m.ativo}
 
 

@@ -88,25 +88,30 @@ def run(reset: bool = True) -> None:
     col_def = [
         ("0412", "Inês Carvalho", "Repositor(a)", TipoVinculo.a_termo, "Amadora", "rui", "11.40", "1111100"),
         ("0198", "Pedro Almeida", "Repositor(a)", TipoVinculo.sem_termo, "Lisboa", "rui", "11.90", "1111110"),
-        ("0877", "Sofia Martins", "Promotor(a)", TipoVinculo.muito_curta_duracao, "Amadora", "rui", "10.80", "1010011"),
+        ("0877", "Sofia Martins", "Promotor(a)", "mcd", "Amadora", "rui", "10.80", "1010011"),
         ("0233", "Carla Sousa", "Repositor(a)", TipoVinculo.sem_termo, "Oeiras", "sara", "12.20", "1111100"),
         ("0951", "João Ferreira", "Promotor(a)", TipoVinculo.recibos_verdes, "Odivelas", "rui", "14.00", "0101000"),
         ("0560", "Ana Lopes", "Repositor(a)", TipoVinculo.a_termo, "Sintra", "sara", "11.40", "1111100"),
         ("0734", "Beatriz Nunes", "Repositor(a)", TipoVinculo.a_termo, "Odivelas", "rui", "11.20", "1101100"),
-        ("0902", "Tiago Moreira", "Promotor(a)", TipoVinculo.muito_curta_duracao, "Loures", "rui", "10.80", "0001111"),
+        ("0902", "Tiago Moreira", "Promotor(a)", "mcd", "Loures", "rui", "10.80", "0001111"),
         ("0645", "Marco Dias", "Repositor(a)", TipoVinculo.sem_termo, "Amadora", "rui", "11.40", "1111100"),
         ("0388", "Rita Gonçalves", "Repositor(a)", TipoVinculo.a_termo, "Sintra", "sara", "11.40", "1111100"),
     ]
     db.add_all([Funcao(tenant_id=T, nome=n) for n in ("Repositor(a)", "Promotor(a)", "Chefe de equipa")])
     cols = {}
     for num, nome, funcao, vinc, z, s, custo, disp in col_def:
-        c = Colaborador(tenant_id=T, numero=num, nome=nome, funcao=funcao, vinculo=vinc, zona_id=zonas[z].id,
+        mcd = vinc == "mcd"
+        vinc = TipoVinculo.a_termo if mcd else vinc
+        c = Colaborador(tenant_id=T, numero=num, nome=nome, funcao=funcao, vinculo=vinc, zona_id=zonas[z].id, muito_curta_duracao=mcd,
                         supervisor_id=users[s].id, custo_hora=D(custo), disponibilidade=disp,
                         email=nome.lower().replace(" ", ".").replace("ç", "c").replace("ê", "e").replace("ã", "a") + "@promovida.pt",
-                        data_inicio=date(2025, 2, 3))
-        if vinc == TipoVinculo.muito_curta_duracao:  # contrato atual recente (máx. 35 dias seguidos)
+                        data_inicio=date(2025, 2, 3), data_admissao=date(2025, 2, 3))
+        if vinc == TipoVinculo.recibos_verdes:
+            c.data_inicio = c.data_admissao = None
+        if mcd:  # contrato atual recente (máx. 35 dias seguidos)
             c.data_inicio = date.today() - timedelta(days=29 if nome == "Sofia Martins" else 12)
             c.data_fim_vinculo = c.data_inicio + timedelta(days=34)
+            c.data_admissao = c.data_inicio
         db.add(c)
         cols[nome] = c
     db.flush()

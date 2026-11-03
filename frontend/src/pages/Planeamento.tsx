@@ -3,7 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AreaBadge, Avatar, Badge, Button, Card, ErrorBox, Icon, IconButton, Loading, Modal, PageHeader, Seg, useToast } from '../components/ui'
 import { api } from '../lib/api'
-import { AREA, addDays, diaMes, diaSemana, horas, iso, intervaloSemana, parseISO, segunda, semanaISO, VINCULO } from '../lib/format'
+import { AREA, addDays, diaMes, diaSemana, horas, iso, intervaloSemana, parseISO, segunda, semanaISO, vinculoTexto } from '../lib/format'
 import type { Candidato, Cliente, IdNome, LinhaColaborador, Ocorrencia, Planeamento as Plan } from '../lib/types'
 
 type Drop = { oc: Ocorrencia; colaboradorId: number; data: string }
@@ -241,7 +241,7 @@ function ColabRow({ c, idx, children }: { c: LinhaColaborador; idx: number; chil
         <Avatar nome={c.nome} tone={idx} />
         <div className="min-w-0">
           <div className="font-medium text-[13px] leading-tight">{c.nome}</div>
-          <div className="text-xs text-ink-60">{VINCULO[c.vinculo].label}{c.funcao ? ` · ${c.funcao}` : ''}</div>
+          <div className="text-xs text-ink-60">{vinculoTexto(c)}{c.funcao ? ` · ${c.funcao}` : ''}</div>
           <div className="text-xs text-ink-60 num">{horas(c.horas_semana)}{c.limite_semana ? ` / ${c.limite_semana} h` : ' · prestador'}</div>
           {c.limite_semana && <div className="w-24 mt-1"><Bar2 pct={pct} /></div>}
           {c.alertas.map((a) => <div key={a} className="text-xs text-err-fg mt-1 flex gap-1"><Icon name="alert" size={12} className="mt-0.5" />{a}</div>)}
@@ -326,7 +326,7 @@ function SubstDialog({ oc, onClose, onEscolher }: { oc: Ocorrencia; onClose: () 
             <li key={c.colaborador_id} className="flex items-start gap-3 py-2.5">
               <Avatar nome={c.nome} tone={i} />
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-[13.5px]">{c.nome} <span className="text-xs text-ink-60 font-normal">· {VINCULO[c.vinculo].label} · {horas(c.horas_semana)} nesta semana</span></div>
+                <div className="font-medium text-[13.5px]">{c.nome} <span className="text-xs text-ink-60 font-normal">· {vinculoTexto(c)} · {horas(c.horas_semana)} nesta semana</span></div>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {c.motivos.map((m) => <Badge key={m} tone="ok">{m}</Badge>)}
                   {c.alertas.map((m) => <Badge key={m} tone="warn">{m}</Badge>)}

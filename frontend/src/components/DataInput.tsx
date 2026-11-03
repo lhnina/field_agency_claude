@@ -47,9 +47,10 @@ type Props = {
   className?: string
   /** Mostra o botão "Limpar" (campos opcionais). */
   limpar?: boolean
+  disabled?: boolean
 }
 
-export function DataInput({ id, value, onChange, min, max, invalid, className = '', limpar }: Props) {
+export function DataInput({ id, value, onChange, min, max, invalid, className = '', limpar, disabled }: Props) {
   const [texto, setTexto] = useState(paraTexto(value))
   const [aberto, setAberto] = useState(false)
   const [erro, setErro] = useState(false)
@@ -96,7 +97,7 @@ export function DataInput({ id, value, onChange, min, max, invalid, className = 
   return (
     <div ref={ref} className={`relative ${className}`}
       onKeyDown={(e) => { if (e.key === 'Escape' && aberto) { e.stopPropagation(); e.preventDefault(); setAberto(false) } }}>
-      <input id={id} className={`inp num pr-9 ${invalid || erro ? 'inp-err' : ''}`} placeholder="dd/mm/aaaa" inputMode="numeric" autoComplete="off"
+      <input id={id} className={`inp num pr-9 ${invalid || erro ? 'inp-err' : ''}`} placeholder="dd/mm/aaaa" inputMode="numeric" autoComplete="off" disabled={disabled}
         value={texto} onBlur={confirmarTexto}
         onChange={(e) => {
           setTexto(e.target.value); setErro(false)
@@ -108,8 +109,8 @@ export function DataInput({ id, value, onChange, min, max, invalid, className = 
           else if (e.key === 'ArrowDown' && e.altKey) { e.preventDefault(); abrir() }
         }}
         aria-invalid={invalid || erro || undefined} title={erro ? 'Data inválida: use dd/mm/aaaa' : undefined} />
-      <button type="button" aria-label="Abrir calendário" tabIndex={-1} onClick={() => (aberto ? setAberto(false) : abrir())}
-        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded text-ink-60 hover:text-ink hover:bg-bg"><Icon name="cal" size={16} /></button>
+      <button type="button" aria-label="Abrir calendário" tabIndex={-1} disabled={disabled} onClick={() => (aberto ? setAberto(false) : abrir())}
+        className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded text-ink-60 hover:text-ink hover:bg-bg disabled:opacity-40 disabled:hover:bg-transparent"><Icon name="cal" size={16} /></button>
       {aberto && (
         <div role="dialog" aria-label="Calendário" style={{ top: pos.top, left: pos.left }} className="fixed z-[60] w-[264px] bg-white border border-line rounded-xl shadow-lg p-3">
           <div className="flex items-center justify-between mb-2">

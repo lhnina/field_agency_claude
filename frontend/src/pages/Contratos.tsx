@@ -19,7 +19,7 @@ export default function Contratos() {
 
   return (
     <>
-      <PageHeader crumb="Comercial" title="Contratos" sub={`${ativos.length} contratos ativos · ${eur(total, 0)} de faturação mensal prevista`}>
+      <PageHeader crumb="Comercial" title="Contratos" sub={`${ativos.length} contratos em curso · ${eur(total, 0)} de faturação mensal prevista`}>
         <Button variant="primary" icon="plus" onClick={() => setNovo(true)}>Novo contrato</Button>
       </PageHeader>
       <Card className="overflow-hidden">

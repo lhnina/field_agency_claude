@@ -127,8 +127,11 @@ class ColaboradorIn(BaseModel):
     email: str | None = None
     telefone: str | None = None
     vinculo: TipoVinculo
-    data_inicio: date | None = None
-    data_fim_vinculo: date | None = None
+    muito_curta_duracao: bool = False
+    data_admissao: date | None = None
+    data_saida: date | None = None
+    data_inicio: date | None = None  # início do contrato
+    data_fim_vinculo: date | None = None  # fim do contrato
     zona_id: int | None = None
     supervisor_id: int | None = None
     custo_hora: Decimal = Decimal("0")
@@ -145,6 +148,22 @@ class ColaboradorIn(BaseModel):
         if len(v) != 7 or set(v) - {"0", "1"}:
             raise ValueError("A disponibilidade tem 7 dígitos 0/1 (segunda a domingo)")
         return v
+
+    @model_validator(mode="after")
+    def _laboral(self):
+        # Recibos verdes: sem datas laborais nem tipo de contrato de trabalho.
+        if self.vinculo == TipoVinculo.recibos_verdes:
+            self.muito_curta_duracao = False
+            self.data_admissao = self.data_saida = self.data_inicio = self.data_fim_vinculo = None
+        return self
+
+    def validar_datas(self) -> None:
+        if self.data_admissao and self.data_saida and self.data_saida < self.data_admissao:
+            raise ValueError("A data de saída é anterior à data de admissão")
+        if self.data_inicio and self.data_fim_vinculo and self.data_fim_vinculo < self.data_inicio:
+            raise ValueError("O fim do contrato é anterior ao início do contrato")
+        if self.muito_curta_duracao and self.vinculo == TipoVinculo.sem_termo:
+            raise ValueError("Um contrato de muito curta duração não pode ser sem termo")
 
 
 class ColaboradorOut(ColaboradorIn, ORM):

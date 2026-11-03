@@ -71,7 +71,7 @@ export default function Colaboradores() {
                             <div className="text-xs text-ink-60">N.º {c.numero}{c.funcao ? ` · ${c.funcao}` : ''}</div></div>
                         </div>
                       </td>
-                      <td><Badge tone={VINCULO[c.vinculo].tone}>{VINCULO[c.vinculo].label}</Badge></td>
+                      <td><Badge tone={VINCULO[c.vinculo].tone}>{VINCULO[c.vinculo].label}</Badge>{c.muito_curta_duracao && <div className="text-xs text-warn-fg mt-1">Muito curta duração</div>}</td>
                       <td className="text-[12.5px]">{c.zona?.nome ?? <span className="text-ink-60">—</span>}</td>
                       <td><Disp d={c.disponibilidade} /></td>
                       <td><Carga h={Number(c.horas_afetadas)} prestador={c.vinculo === 'recibos_verdes'} /></td>
@@ -92,15 +92,18 @@ export default function Colaboradores() {
               <div className="flex-1 min-w-0">
                 <div className="text-[17px] font-semibold tracking-[-0.01em]">{atual.nome}</div>
                 <div className="text-[12.5px] text-ink-60">N.º {atual.numero}{atual.funcao ? ` · ${atual.funcao}` : ''}</div>
-                <div className="flex gap-1.5 mt-2">{atual.ativo ? <Badge tone="ok" dot>Ativo</Badge> : <Badge dot>Inativo</Badge>}<Badge tone={VINCULO[atual.vinculo].tone}>{VINCULO[atual.vinculo].label}</Badge></div>
+                <div className="flex gap-1.5 mt-2">{atual.ativo ? <Badge tone="ok" dot>Ativo</Badge> : <Badge dot>Inativo</Badge>}<Badge tone={VINCULO[atual.vinculo].tone}>{VINCULO[atual.vinculo].label}</Badge>{atual.muito_curta_duracao && <Badge tone="warn">Muito curta duração</Badge>}</div>
               </div>
               <Button size="sm" variant="primary" icon="edit" onClick={() => setEdit(atual)}>Editar</Button>
             </div>
             {atual.vinculo === 'recibos_verdes' && <div className="px-[18px] pb-3"><Aviso>Prestador independente: os serviços são propostos e aceites por ele, sem escala imposta.</Aviso></div>}
-            <Indicadores id={atual.id} vinculo={atual.vinculo} />
+            <Indicadores id={atual.id} mcd={atual.muito_curta_duracao} />
             <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-[18px] py-3.5 border-t border-line-soft">
-              {[['Supervisor', nomeSup(atual.supervisor_id)], ['Zona', atual.zona?.nome ?? '—'], ['Início', dataCurta(atual.data_inicio)], ['Custo/hora', eur(atual.custo_hora)],
-                ['Telemóvel', atual.telefone ?? '—'], ['Email', atual.email ?? '—']].map(([k, v]) => (
+              {[['Supervisor', nomeSup(atual.supervisor_id)], ['Zona', atual.zona?.nome ?? '—'], ['Custo/hora', eur(atual.custo_hora)], ['Telemóvel', atual.telefone ?? '—'],
+                ...(atual.vinculo === 'recibos_verdes' ? [] : [
+                  ['Admissão', dataCurta(atual.data_admissao)], ['Saída', dataCurta(atual.data_saida)],
+                  ['Contrato', atual.data_inicio || atual.data_fim_vinculo ? `${dataCurta(atual.data_inicio)} – ${atual.data_fim_vinculo ? dataCurta(atual.data_fim_vinculo) : 'sem fim'}` : '—']]),
+                ['Email', atual.email ?? '—']].map(([k, v]) => (
                 <div key={k} className="min-w-0"><dt className="text-xs text-ink-60">{k}</dt><dd className="text-[13.5px] font-medium truncate">{v}</dd></div>
               ))}
             </dl>
@@ -193,7 +196,7 @@ function DocumentosColab({ id, nome }: { id: number; nome: string }) {
 }
 
 type Ind = { dias_trabalhados_ano: number; dias_planeados_ano: number; dias_contrato_atual?: number; alertas: { nivel: string; texto: string }[] }
-function Indicadores({ id, vinculo }: { id: number; vinculo: Vinculo }) {
+function Indicadores({ id, mcd }: { id: number; mcd: boolean }) {
   const q = useQuery({ queryKey: ['indicadores', id], queryFn: () => api<Ind>(`/colaboradores/${id}/indicadores`) })
   if (!q.data) return null
   const d = q.data
@@ -201,7 +204,7 @@ function Indicadores({ id, vinculo }: { id: number; vinculo: Vinculo }) {
   return (
     <div className="px-[18px] pb-3.5 flex flex-col gap-2.5">
       {d.alertas.map((a) => <Aviso key={a.texto} erro={a.nivel === 'erro'}>{a.texto}</Aviso>)}
-      {vinculo === 'muito_curta_duracao' && (
+      {mcd && (
         <div className="grid grid-cols-2 gap-3">
           <div><div className="text-xs text-ink-60">Dias no ano (máx. 70)</div><div className="text-[15px] font-semibold num">{d.dias_trabalhados_ano} trabalhados + {d.dias_planeados_ano} planeados</div>
             <div className="mt-1"><Bar pct={(total / 70) * 100} tone={total > 70 ? 'err' : total >= 56 ? 'warn' : 'ok'} /></div></div>
@@ -209,7 +212,7 @@ function Indicadores({ id, vinculo }: { id: number; vinculo: Vinculo }) {
             <div className="mt-1"><Bar pct={((d.dias_contrato_atual ?? 0) / 35) * 100} tone={(d.dias_contrato_atual ?? 0) > 35 ? 'err' : (d.dias_contrato_atual ?? 0) >= 28 ? 'warn' : 'ok'} /></div></div>
         </div>
       )}
-      {vinculo !== 'muito_curta_duracao' && <div className="text-[12.5px] text-ink-60">{d.dias_trabalhados_ano} dias com serviço em {new Date().getFullYear()} · {d.dias_planeados_ano} planeados até ao fim do ano</div>}
+      {!mcd && <div className="text-[12.5px] text-ink-60">{d.dias_trabalhados_ano} dias com serviço em {new Date().getFullYear()} · {d.dias_planeados_ano} planeados até ao fim do ano</div>}
     </div>
   )
 }
@@ -236,15 +239,24 @@ function ColabDialog({ c, onClose }: { c: Colaborador | null; onClose: () => voi
   const funcoes = useQuery({ queryKey: ['funcoes'], queryFn: () => api<IdNome[]>('/funcoes') })
   const [f, setF] = useState({
     numero: c?.numero ?? '', nome: c?.nome ?? '', funcao: c?.funcao ?? '', email: c?.email ?? '', telefone: c?.telefone ?? '',
-    vinculo: (c?.vinculo ?? 'a_termo') as Vinculo, data_inicio: c?.data_inicio ?? '', zona_id: c?.zona_id ? String(c.zona_id) : '',
+    vinculo: (c?.vinculo ?? 'a_termo') as Vinculo, muito_curta_duracao: c?.muito_curta_duracao ?? false,
+    data_admissao: c?.data_admissao ?? '', data_saida: c?.data_saida ?? '', data_inicio: c?.data_inicio ?? '', data_fim_vinculo: c?.data_fim_vinculo ?? '', zona_id: c?.zona_id ? String(c.zona_id) : '',
     supervisor_id: c?.supervisor_id ? String(c.supervisor_id) : '', custo_hora: c?.custo_hora ?? '', disponibilidade: c?.disponibilidade ?? '1111100',
     data_nascimento: c?.data_nascimento ?? '', numero_identificacao: c?.numero_identificacao ?? '', niss: c?.niss ?? '',
   })
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value })
+  const rv = f.vinculo === 'recibos_verdes'  // prestador: sem datas laborais nem tipo de contrato
+  const mcdPossivel = f.vinculo === 'a_termo'
+  const mudarVinculo = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const v = e.target.value as Vinculo
+    setF({ ...f, vinculo: v, muito_curta_duracao: v === 'a_termo' ? f.muito_curta_duracao : false })
+  }
   const m = useMutation({
     mutationFn: () => api<Colaborador>(c ? `/colaboradores/${c.id}` : '/colaboradores', {
       method: c ? 'PUT' : 'POST',
-      body: { ...f, funcao: f.funcao || null, email: f.email || null, telefone: f.telefone || null, data_inicio: f.data_inicio || null,
+      body: { ...f, funcao: f.funcao || null, email: f.email || null, telefone: f.telefone || null, muito_curta_duracao: mcdPossivel && f.muito_curta_duracao,
+        data_admissao: rv ? null : f.data_admissao || null, data_saida: rv ? null : f.data_saida || null,
+        data_inicio: rv ? null : f.data_inicio || null, data_fim_vinculo: rv ? null : f.data_fim_vinculo || null,
         zona_id: f.zona_id ? Number(f.zona_id) : null, supervisor_id: f.supervisor_id ? Number(f.supervisor_id) : null,
         custo_hora: Number(String(f.custo_hora).replace(',', '.')) || 0, ativo: c?.ativo ?? true,
         data_nascimento: f.data_nascimento || null, numero_identificacao: f.numero_identificacao.trim() || null, niss: f.niss.trim() || null },
@@ -264,15 +276,26 @@ function ColabDialog({ c, onClose }: { c: Colaborador | null; onClose: () => voi
             {f.funcao && !funcoes.data?.some((x) => x.nome === f.funcao) && <option value={f.funcao}>{f.funcao}</option>}
           </select>)}</Field>
         <Field label="Vínculo">{(id) => (
-          <select id={id} className="inp" value={f.vinculo} onChange={set('vinculo')}>
+          <select id={id} className="inp" value={f.vinculo} onChange={mudarVinculo}>
             {Object.entries(VINCULO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>)}</Field>
         <Field label="Zona">{(id) => <select id={id} className="inp" value={f.zona_id} onChange={set('zona_id')}><option value="">—</option>{zonas.data?.map((z) => <option key={z.id} value={z.id}>{z.nome}</option>)}</select>}</Field>
         <Field label="Supervisor">{(id) => <select id={id} className="inp" value={f.supervisor_id} onChange={set('supervisor_id')}><option value="">—</option>{sups.data?.map((z) => <option key={z.id} value={z.id}>{z.nome}</option>)}</select>}</Field>
         <Field label="Custo por hora (€)" hint="Pode ser definido um Custo Fixo por loja no contrato">{(id) => <input id={id} inputMode="decimal" className="inp num" value={f.custo_hora} onChange={set('custo_hora')} />}</Field>
-        <Field label="Data de início">{(id) => <DataInput id={id} limpar value={f.data_inicio} onChange={(v) => setF({ ...f, data_inicio: v })} />}</Field>
         <Field label="Telemóvel">{(id) => <input id={id} className="inp" value={f.telefone} onChange={set('telefone')} />}</Field>
         <Field label="Email">{(id) => <input id={id} type="email" className="inp" value={f.email} onChange={set('email')} />}</Field>
+        <div className={`col-span-2 grid grid-cols-2 gap-3.5 pt-1 border-t border-line-soft ${rv ? 'opacity-60' : ''}`}>
+          <div className="col-span-2 flex items-center justify-between gap-3 pt-2">
+            <span className="text-xs text-ink-60">Contrato de trabalho{rv ? ' — não se aplica a recibos verdes' : ''}</span>
+            <label className={`inline-flex items-center gap-2 text-[13px] ${mcdPossivel ? 'text-ink' : 'text-ink-60'}`} title={mcdPossivel ? undefined : 'Só para contratos a termo'}>
+              <input type="checkbox" className="accent-petrol-600 w-4 h-4" disabled={!mcdPossivel} checked={mcdPossivel && f.muito_curta_duracao}
+                onChange={(e) => setF({ ...f, muito_curta_duracao: e.target.checked })} />Muito curta duração</label>
+          </div>
+          <Field label="Data de admissão">{(id) => <DataInput id={id} limpar disabled={rv} value={rv ? '' : f.data_admissao} onChange={(v) => setF({ ...f, data_admissao: v })} />}</Field>
+          <Field label="Data de saída">{(id) => <DataInput id={id} limpar disabled={rv} value={rv ? '' : f.data_saida} min={f.data_admissao || undefined} onChange={(v) => setF({ ...f, data_saida: v })} />}</Field>
+          <Field label="Início do contrato">{(id) => <DataInput id={id} limpar disabled={rv} value={rv ? '' : f.data_inicio} onChange={(v) => setF({ ...f, data_inicio: v })} />}</Field>
+          <Field label="Fim do contrato" hint={f.muito_curta_duracao && mcdPossivel ? 'Máx. 35 dias seguidos' : undefined}>{(id) => <DataInput id={id} limpar disabled={rv} value={rv ? '' : f.data_fim_vinculo} min={f.data_inicio || undefined} onChange={(v) => setF({ ...f, data_fim_vinculo: v })} />}</Field>
+        </div>
         <div className="col-span-2 grid grid-cols-3 gap-3.5 pt-1 border-t border-line-soft">
           <div className="col-span-3 text-xs text-ink-60 pt-2">Identificação (usada nas credenciais)</div>
           <Field label="Data de nascimento">{(id) => <DataInput id={id} limpar value={f.data_nascimento} max={new Date().toISOString().slice(0, 10)} onChange={(v) => setF({ ...f, data_nascimento: v })} />}</Field>

@@ -9,7 +9,7 @@ import type { Vinculo } from '../lib/types'
 
 type Ap = {
   mes: string; fechado: boolean
-  colaboradores: { colaborador_id: number; numero: string; nome: string; vinculo: Vinculo; prestador: boolean; horas: number; valor: number; pendentes: number
+  colaboradores: { colaborador_id: number; numero: string; nome: string; vinculo: Vinculo; muito_curta_duracao?: boolean; prestador: boolean; horas: number; valor: number; pendentes: number
     linhas: { cliente: string; codigo_erp: number | null; valor_hora: number; horas: number; valor: number; tacitas: number; servicos: number }[] }[]
   totais: { horas: number; valor: number; valor_trabalhadores: number; valor_prestadores: number; colaboradores: number; prestadores: number; pendentes: number }
 }
@@ -68,7 +68,7 @@ export default function Apuramentos() {
                         <td><button type="button" aria-expanded={aberto.has(c.colaborador_id)} className="flex items-center gap-2.5 text-left">
                           <Icon name={aberto.has(c.colaborador_id) ? 'cd' : 'cr'} size={15} className="text-ink-60" /><Avatar nome={c.nome} />
                           <span><span className="font-medium">{c.nome}</span><span className="block text-xs text-ink-60">N.º {c.numero}</span></span></button></td>
-                        <td><Badge tone={VINCULO[c.vinculo].tone}>{VINCULO[c.vinculo].label}</Badge></td>
+                        <td><Badge tone={VINCULO[c.vinculo].tone}>{VINCULO[c.vinculo].label}</Badge>{c.muito_curta_duracao && <div className="text-xs text-ink-60 mt-0.5">Muito curta duração</div>}</td>
                         <td className="text-right num">{c.linhas.length}</td>
                         <td className="text-right num font-medium">{num(c.horas)}</td>
                         <td className="text-right num font-semibold">{eur(c.valor)}</td>

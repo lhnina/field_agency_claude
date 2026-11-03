@@ -29,7 +29,7 @@ export default function Dashboard() {
         <Link to="/planeamento"><Button variant="primary" icon="cal">Abrir planeamento</Button></Link>
       </PageHeader>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <Kpi label="Faturação mensal prevista" value={eur(d.faturacao_mensal_prevista, 0)} sub={`${d.contratos_ativos} contratos ativos · horas contratadas`} />
+        <Kpi label="Faturação mensal prevista" value={eur(d.faturacao_mensal_prevista, 0)} sub={`${d.contratos_ativos} contratos em curso · horas contratadas`} />
         <Kpi label="Horas contratadas · mês" value={horas(Math.round(d.horas_contratadas_mes))} sub="horas/semana × 52 ÷ 12" />
         <Kpi label="Horas planeadas · este mês" value={horas(Math.round(d.horas_planeadas_mes))}
           sub={`${Math.round(cobertura)} % das contratadas`} extra={<div className="mt-2"><Bar pct={cobertura} tone={cobertura < 95 ? 'warn' : 'ok'} /></div>} />

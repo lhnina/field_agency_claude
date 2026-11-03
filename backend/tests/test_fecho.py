@@ -133,7 +133,8 @@ def test_nao_fecha_mes_corrente(mundo):
 
 
 def test_muito_curta_duracao_alertas(mundo):
-    mundo.pedro.vinculo = TipoVinculo.muito_curta_duracao
+    mundo.pedro.vinculo = TipoVinculo.a_termo
+    mundo.pedro.muito_curta_duracao = True
     mundo.pedro.data_inicio = HOJE - timedelta(days=30)
     preparar(mundo, horas=(1, 1, 1, 1, 1, 1, 0), inicio=date(2026, 9, 1), colab=mundo.pedro)
     r = fecho.indicadores_colaborador(mundo.db, mundo.pedro, HOJE)

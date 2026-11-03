@@ -1,5 +1,5 @@
 import { api } from '../lib/api'
-import { horas, VINCULO } from '../lib/format'
+import { horas, vinculoTexto } from '../lib/format'
 import type { Colaborador } from '../lib/types'
 import { Pesquisa } from './Pesquisa'
 
@@ -19,7 +19,7 @@ export function ColaboradorPicker({ id, value, onChange, zonaPreferida }: Props)
           {zonaPreferida && c.zona?.nome === zonaPreferida && <span className="text-[11px] text-ok-fg">zona da loja</span>}
           <span className="ml-auto text-xs text-ink-60 num">{c.vinculo === 'recibos_verdes' ? 'prestador' : `${horas(c.horas_afetadas)} afetas/sem`}</span>
         </div>
-        <div className="text-xs text-ink-60">{[`N.º ${c.numero}`, c.funcao, c.zona?.nome, VINCULO[c.vinculo].label].filter(Boolean).join(' · ')}</div>
+        <div className="text-xs text-ink-60">{[`N.º ${c.numero}`, c.funcao, c.zona?.nome, vinculoTexto(c)].filter(Boolean).join(' · ')}</div>
       </>} />
   )
 }

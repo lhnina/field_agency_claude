@@ -72,7 +72,8 @@ def _data(v: Any, campo: str) -> date | None:
 
 VINCULOS = {
     "sem termo": TipoVinculo.sem_termo, "efetivo": TipoVinculo.sem_termo, "a termo": TipoVinculo.a_termo,
-    "muito curta duracao": TipoVinculo.muito_curta_duracao, "curta duracao": TipoVinculo.muito_curta_duracao,
+    # compatibilidade: "muito curta duração" é um tipo de contrato a termo, não um vínculo
+    "muito curta duracao": TipoVinculo.a_termo, "curta duracao": TipoVinculo.a_termo,
     "recibos verdes": TipoVinculo.recibos_verdes, "prestador": TipoVinculo.recibos_verdes,
 }
 TIPOS = {"reposicao": TipoContrato.REP, "rep": TipoContrato.REP, "promocao": TipoContrato.PRO,
@@ -132,9 +133,12 @@ MODELOS: dict[str, Modelo] = {
     ], ["Se a loja já existir (mesmo nome), é atualizada.", "Insígnias e zonas novas são criadas automaticamente."]),
     "colaboradores": Modelo("Colaboradores", [
         Coluna("N.º", True, "0412"), Coluna("Nome", True, "Inês Carvalho"), Coluna("Função", False, "Repositor(a)"),
-        Coluna("Vínculo", True, "A termo", lista=["Sem termo", "A termo", "Muito curta duração", "Recibos verdes"]),
-        Coluna("Data de início", False, "03/02/2025", "dd/mm/aaaa (na muito curta duração: início do contrato atual)"),
-        Coluna("Data de fim do vínculo", False, None, "dd/mm/aaaa"),
+        Coluna("Vínculo", True, "A termo", lista=["Sem termo", "A termo", "Recibos verdes"]),
+        Coluna("Muito curta duração", False, "Não", "Sim / Não (só contratos a termo)", lista=["Sim", "Não"]),
+        Coluna("Data de admissão", False, "03/02/2025", "dd/mm/aaaa"),
+        Coluna("Data de saída", False, None, "dd/mm/aaaa"),
+        Coluna("Data de início", False, "03/02/2025", "dd/mm/aaaa — início do contrato atual"),
+        Coluna("Data de fim do vínculo", False, None, "dd/mm/aaaa — fim do contrato atual"),
         Coluna("Zona", False, "Amadora"), Coluna("Supervisor", False, "rui@promovida.pt", "Email ou nome"),
         Coluna("Custo por hora", False, 11.40, "€"), Coluna("Telemóvel", False, "912345118"),
         Coluna("Email", False, "ines@exemplo.pt"),
@@ -154,7 +158,7 @@ MODELOS: dict[str, Modelo] = {
         Coluna("Colaborador (N.º)", False, "0412", "Afeto desde o início da linha"),
         Coluna("Início da linha", False, None, "Vazio = início do contrato"),
         Coluna("Fim da linha", False, None, "Vazio = fim do contrato"),
-        Coluna("Estado", False, "Ativo", lista=["Ativo", "Proposta"]),
+        Coluna("Estado", False, "Em curso", lista=["Em curso", "Em orçamento"]),
     ], ["Uma linha por loja; as linhas com a mesma Referência formam um contrato.",
         "Os contratos são sempre criados de novo, com numeração automática. Contratos ativos geram logo o planeamento."]),
     "logistica": Modelo("Pedidos de logística", [
@@ -413,11 +417,20 @@ def _colaboradores(ctx: Contexto, rows, gravar: bool) -> Resultado:
         if num in vistos:
             erros.append("N.º repetido no ficheiro")
         vistos.add(num)
-        vinc = VINCULOS.get(_norm(_txt(r.get("Vínculo")) or ""))
+        vtxt = _norm(_txt(r.get("Vínculo")) or "")
+        vinc = VINCULOS.get(vtxt)
         if not vinc:
-            erros.append(f"Vínculo '{_txt(r.get('Vínculo')) or ''}' inválido (Sem termo, A termo, Muito curta duração, Recibos verdes)")
+            erros.append(f"Vínculo '{_txt(r.get('Vínculo')) or ''}' inválido (Sem termo, A termo, Recibos verdes)")
         vals: dict[str, Any] = {}
-        for campo, fn, attr in [("Data de início", _data, "data_inicio"), ("Data de fim do vínculo", _data, "data_fim_vinculo"),
+        mcd = _norm(_txt(r.get("Muito curta duração")) or "")
+        if "curta" in vtxt or mcd in ("sim", "s", "x", "1", "true", "verdadeiro"):
+            vals["muito_curta_duracao"] = True
+        elif mcd in ("nao", "n", "0", "false", "falso"):
+            vals["muito_curta_duracao"] = False
+        if vals.get("muito_curta_duracao") and vinc != TipoVinculo.a_termo:
+            erros.append("Muito curta duração só se aplica a contratos a termo")
+        for campo, fn, attr in [("Data de admissão", _data, "data_admissao"), ("Data de saída", _data, "data_saida"),
+                                ("Data de início", _data, "data_inicio"), ("Data de fim do vínculo", _data, "data_fim_vinculo"),
                                 ("Custo por hora", _dec, "custo_hora")]:
             try:
                 vals[attr] = fn(r.get(campo), campo)
@@ -451,6 +464,9 @@ def _colaboradores(ctx: Contexto, rows, gravar: bool) -> Resultado:
             for attr, v in vals.items():
                 if v is not None:
                     setattr(c, attr, v)
+            if c.vinculo == TipoVinculo.recibos_verdes:  # sem datas laborais nem tipo de contrato
+                c.muito_curta_duracao = False
+                c.data_admissao = c.data_saida = c.data_inicio = c.data_fim_vinculo = None
             for col, attr in [("Função", "funcao"), ("Telemóvel", "telefone"), ("Email", "email")]:
                 v = _txt(r.get(col))
                 if v is not None:
@@ -521,7 +537,8 @@ def _contratos(ctx: Contexto, rows, gravar: bool) -> Resultado:
         col = colabs.get(num_col) if num_col else None
         if num_col and not col:
             erros.append(f"Colaborador n.º {num_col} não existe")
-        estado = EstadoContrato.proposta if _norm(_txt(r.get("Estado")) or "ativo") == "proposta" else EstadoContrato.ativo
+        estado = (EstadoContrato.proposta if _norm(_txt(r.get("Estado")) or "ativo") in ("proposta", "em orcamento", "orcamento")
+                  else EstadoContrato.ativo)
         g = grupos.setdefault(ref, {"tipo": tipo, "cliente": cli, "inicio": v.get("inicio"), "fim": v.get("fim"), "estado": estado})
         if g["tipo"] != tipo or g["cliente"] is not cli or g["inicio"] != v.get("inicio") or g["fim"] != v.get("fim"):
             erros.append(f"As linhas da referência {ref} têm tipo, cliente ou datas diferentes")

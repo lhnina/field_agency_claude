@@ -418,7 +418,7 @@ export function ServicosContrato({ contrato }: { contrato: Contrato }) {
             onExecutar={() => setExecutar(s)} onEditar={() => setEditar(s)} onCancelar={() => setCancelar(s)} onValidar={() => validar.mutate([s.id])} />
         ))}</div>
       )}
-      {contrato.estado === 'proposta' && <div className="px-4 py-3 border-t border-line text-[12.5px] text-warn-fg flex items-center gap-1.5"><Icon name="alert" size={14} />Ative o contrato para os serviços aparecerem na Logística.</div>}
+      {contrato.estado === 'proposta' && <div className="px-4 py-3 border-t border-line text-[12.5px] text-warn-fg flex items-center gap-1.5"><Icon name="alert" size={14} />Passe o contrato a Em curso para os serviços aparecerem na Logística.</div>}
       {novo && <ServicoDialog contratoId={contrato.id} contrato={contrato} onClose={() => setNovo(false)} />}
       {editar && <ServicoDialog contratoId={contrato.id} contrato={contrato} s={editar} onClose={() => setEditar(null)} />}
       {atribuir && <AtribuirDialog s={atribuir} onClose={() => setAtribuir(null)} />}

@@ -125,7 +125,7 @@ def custo_hora(o: Ocorrencia, colabs: dict[int, Colaborador], tenant: Tenant | N
     c = colabs.get(o.colaborador_id) if o.colaborador_id else None
     base = o.linha.custo_hora_especial if o.linha.custo_hora_especial is not None else (c.custo_hora if c else Z)
     if tenant is not None and c is not None:
-        base = base * (1 + tenant.encargos_pct(c.vinculo) / 100)
+        base = base * (1 + tenant.encargos_colaborador(c) / 100)
     return base
 
 
@@ -296,7 +296,7 @@ def apuramento(db: Session, tenant_id: int, mes: date, hoje: date, supervisor_id
     for (cid, _, _), r in linhas.items():
         c = colabs[cid]
         d = por_colab.setdefault(cid, {"colaborador_id": cid, "numero": c.numero, "nome": c.nome,
-                                       "vinculo": c.vinculo.value, "prestador": c.vinculo == TipoVinculo.recibos_verdes,
+                                       "vinculo": c.vinculo.value, "muito_curta_duracao": c.muito_curta_duracao, "prestador": c.vinculo == TipoVinculo.recibos_verdes,
                                        "linhas": [], "horas": Z, "valor": Z})
         valor = op.q2(r["horas"] * r["valor_hora"])
         d["linhas"].append({**r, "horas": float(r["horas"]), "valor_hora": float(r["valor_hora"]), "valor": float(valor)})
@@ -306,7 +306,7 @@ def apuramento(db: Session, tenant_id: int, mes: date, hoje: date, supervisor_id
         if cid not in por_colab:
             c = colabs[cid]
             por_colab[cid] = {"colaborador_id": cid, "numero": c.numero, "nome": c.nome, "vinculo": c.vinculo.value,
-                              "prestador": c.vinculo == TipoVinculo.recibos_verdes, "linhas": [], "horas": Z, "valor": Z}
+                              "muito_curta_duracao": c.muito_curta_duracao, "prestador": c.vinculo == TipoVinculo.recibos_verdes, "linhas": [], "horas": Z, "valor": Z}
     lista = []
     for d in sorted(por_colab.values(), key=lambda x: x["nome"]):
         d["pendentes"] = pend_por_colab.get(d["colaborador_id"], 0)
@@ -388,7 +388,7 @@ def indicadores_colaborador(db: Session, c: Colaborador, hoje: date) -> dict:
     trabalhados = sum(1 for d in datas if d <= hoje)
     planeados = sum(1 for d in datas if d > hoje)
     res = {"dias_trabalhados_ano": trabalhados, "dias_planeados_ano": planeados, "alertas": []}
-    if c.vinculo == TipoVinculo.muito_curta_duracao:
+    if c.muito_curta_duracao:
         res["limite_dias_ano"] = 70
         res["limite_dias_contrato"] = 35
         dc = (hoje - c.data_inicio).days + 1 if c.data_inicio and c.data_inicio <= hoje else 0

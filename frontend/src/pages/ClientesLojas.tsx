@@ -68,7 +68,7 @@ function Clientes() {
         {lista.isLoading ? <Loading /> : lista.error ? <div className="p-4"><ErrorBox error={lista.error} /></div> : itens.length === 0 ? <Empty title="Sem clientes" /> : (
           <div className="overflow-x-auto">
             <table className="tbl">
-              <thead><tr><th>Cliente</th><th>Localidade</th><th>Gestor de conta</th><th className="text-right">Contratos ativos</th><th className="text-right">Valor mensal</th></tr></thead>
+              <thead><tr><th>Cliente</th><th>Localidade</th><th>Gestor de conta</th><th className="text-right">Contratos em curso</th><th className="text-right">Valor mensal</th></tr></thead>
               <tbody>{itens.map((c) => {
                 const ca = ativosPorCliente(c.id)
                 return (

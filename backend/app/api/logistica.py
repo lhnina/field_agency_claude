@@ -128,10 +128,10 @@ def _lista(db: Session, user: User, q) -> list[dict]:
 def servicos(inicio: date, fim: date, estado: str | None = None, viatura_id: int | None = None,
              cliente_id: int | None = None, colaborador_id: int | None = None,
              user: User = Depends(requer("planeamento.ler")), db: Session = Depends(get_db)):
-    """Serviços de contratos de Logística ativos (ou terminados) entre duas datas."""
+    """Serviços de contratos de Logística em curso entre duas datas (os restantes veem-se no próprio contrato)."""
     q = select(ServicoLogistico).join(Contrato, ServicoLogistico.contrato_id == Contrato.id).where(
         ServicoLogistico.tenant_id == user.tenant_id, ServicoLogistico.data.between(inicio, fim),
-        Contrato.estado.in_((EstadoContrato.ativo, EstadoContrato.terminado)))
+        Contrato.estado == EstadoContrato.ativo)
     if estado == "pendentes":
         q = q.where(ServicoLogistico.estado.in_((EstadoServicoLog.planeado, EstadoServicoLog.atribuido)))
     elif estado:

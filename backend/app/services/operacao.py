@@ -228,8 +228,9 @@ def mover(db: Session, user: User, o: Ocorrencia, nova_data: date) -> Ocorrencia
 
 
 def ocorrencias_afetadas(db: Session, aus: Ausencia) -> list[Ocorrencia]:
-    return db.scalars(select(Ocorrencia).options(joinedload(Ocorrencia.linha).joinedload(LinhaContrato.loja)).where(
-        Ocorrencia.tenant_id == aus.tenant_id,
+    return db.scalars(select(Ocorrencia).options(joinedload(Ocorrencia.linha).joinedload(LinhaContrato.loja))
+                      .join(LinhaContrato, Ocorrencia.linha_id == LinhaContrato.id).join(Contrato, LinhaContrato.contrato_id == Contrato.id).where(
+        Ocorrencia.tenant_id == aus.tenant_id, Contrato.estado == EstadoContrato.ativo,
         Ocorrencia.data.between(aus.inicio, aus.fim),
         Ocorrencia.estado.in_(EDITAVEIS),
         or_(Ocorrencia.colaborador_efetivo_id == aus.colaborador_id,
@@ -240,9 +241,10 @@ def ocorrencias_afetadas(db: Session, aus: Ausencia) -> list[Ocorrencia]:
 # ------------------------------------------------------------------ carga e candidatos
 def _horas_por_colaborador(db: Session, tenant_id: int, ini: date, fim: date) -> dict[tuple[int, date], Decimal]:
     rows = db.execute(select(Ocorrencia.colaborador_efetivo_id, Ocorrencia.colaborador_previsto_id, Ocorrencia.data,
-                             Ocorrencia.horas_planeadas).where(
-        Ocorrencia.tenant_id == tenant_id, Ocorrencia.data.between(ini, fim),
-        Ocorrencia.estado != EstadoOcorrencia.cancelado)).all()
+                             Ocorrencia.horas_planeadas)
+        .join(LinhaContrato, Ocorrencia.linha_id == LinhaContrato.id).join(Contrato, LinhaContrato.contrato_id == Contrato.id)
+        .where(Ocorrencia.tenant_id == tenant_id, Ocorrencia.data.between(ini, fim),
+               Ocorrencia.estado != EstadoOcorrencia.cancelado, Contrato.estado == EstadoContrato.ativo)).all()
     out: dict[tuple[int, date], Decimal] = {}
     for ef, pr, d, h in rows:
         cid = ef or pr
@@ -292,7 +294,7 @@ def candidatos(db: Session, o: Ocorrencia, limite: int = 8) -> list[dict]:
         for falta in ctx_doc.falhas(c, o.linha.contrato.cliente_id, loja.insignia_id, o.data):
             bloqueios.append(f"Documentação: {falta}")
         pontos += 1 if semana < 20 else 0
-        res.append({"colaborador_id": c.id, "nome": c.nome, "vinculo": c.vinculo.value, "horas_dia": float(dia),
+        res.append({"colaborador_id": c.id, "nome": c.nome, "vinculo": c.vinculo.value, "muito_curta_duracao": c.muito_curta_duracao, "horas_dia": float(dia),
                     "horas_semana": float(semana), "pontos": pontos - 10 * len(bloqueios), "motivos": motivos,
                     "alertas": bloqueios})
     res.sort(key=lambda r: (-r["pontos"], r["horas_semana"]))
@@ -318,7 +320,9 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
          .options(joinedload(Ocorrencia.linha).joinedload(LinhaContrato.loja),
                   joinedload(Ocorrencia.linha).joinedload(LinhaContrato.contrato).joinedload(Contrato.cliente))
          .where(Ocorrencia.tenant_id == user.tenant_id, Ocorrencia.data.between(segunda, dom),
-                Ocorrencia.estado != EstadoOcorrencia.cancelado))
+                Ocorrencia.estado != EstadoOcorrencia.cancelado,
+                # Só contratos "Em curso": em orçamento, suspensos e terminados não aparecem.
+                Contrato.estado == EstadoContrato.ativo))
     # Todos os filtros combinam-se (E). Na vista de um colaborador, a zona só filtra
     # os serviços por atribuir: os serviços dele aparecem em qualquer zona.
     alvo = set(f.colaborador_ids)
@@ -413,14 +417,14 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
             dias_trab = sorted({d for (k, d), _ in horas.items() if k == cid})
             if len(dias_trab) >= 7:
                 alertas.append("Sem dia de descanso semanal")
-            if c.vinculo == TipoVinculo.muito_curta_duracao:
+            if c.muito_curta_duracao:
                 from app.services.fecho import indicadores_colaborador  # import local: evita ciclo
                 alertas += [a["texto"] for a in indicadores_colaborador(db, c, date.today())["alertas"]]
         if falhas_doc.get(cid):
             alertas.append("Documentação: " + ", ".join(sorted(falhas_doc[cid])))
         aus = [{"tipo": a.tipo.value, "inicio": a.inicio.isoformat(), "fim": a.fim.isoformat()} for a in ausencias.get(cid, [])]
         linhas_colab.append({
-            "id": cid, "nome": c.nome, "numero": c.numero, "vinculo": c.vinculo.value, "funcao": c.funcao,
+            "id": cid, "nome": c.nome, "numero": c.numero, "vinculo": c.vinculo.value, "muito_curta_duracao": c.muito_curta_duracao, "funcao": c.funcao,
             "horas_semana": float(tot), "limite_semana": None if c.vinculo == TipoVinculo.recibos_verdes else settings.limite_horas_semana,
             "alertas": alertas, "ausencias": aus, "disponibilidade": c.disponibilidade,
         })

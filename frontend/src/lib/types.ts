@@ -1,7 +1,7 @@
 export type IdNome = { id: number; nome: string }
 export type TipoContrato = 'REP' | 'PRO' | 'LOG' | 'EQF'
 export type EstadoContrato = 'proposta' | 'ativo' | 'suspenso' | 'terminado'
-export type Vinculo = 'sem_termo' | 'a_termo' | 'muito_curta_duracao' | 'recibos_verdes'
+export type Vinculo = 'sem_termo' | 'a_termo' | 'recibos_verdes'
 
 export type Cliente = {
   id: number; nome: string; nif: string | null; codigo_erp: number | null; morada: string | null; codigo_postal: string | null
@@ -19,7 +19,8 @@ export type Loja = {
 
 export type Colaborador = {
   id: number; numero: string; nome: string; funcao: string | null; email: string | null; telefone: string | null
-  vinculo: Vinculo; data_inicio: string | null; data_fim_vinculo: string | null; zona_id: number | null
+  vinculo: Vinculo; muito_curta_duracao: boolean; data_admissao: string | null; data_saida: string | null
+  data_inicio: string | null; data_fim_vinculo: string | null; zona_id: number | null
   supervisor_id: number | null; custo_hora: string; disponibilidade: string; ativo: boolean; zona: IdNome | null
   horas_afetadas: string
   data_nascimento: string | null; numero_identificacao: string | null; niss: string | null
@@ -52,7 +53,7 @@ export type Ocorrencia = {
   cliente: string; loja: string; loja_id: number; mecanica: string | null; alertas: string[]; documentacao?: string[]
 }
 export type LinhaColaborador = {
-  id: number; nome: string; numero: string; vinculo: Vinculo; funcao: string | null; horas_semana: number
+  id: number; nome: string; numero: string; vinculo: Vinculo; muito_curta_duracao?: boolean; funcao: string | null; horas_semana: number
   limite_semana: number | null; alertas: string[]; ausencias: { tipo: string; inicio: string; fim: string }[]; disponibilidade: string
 }
 export type Planeamento = {
@@ -60,7 +61,7 @@ export type Planeamento = {
   por_atribuir: Ocorrencia[]; resumo: { total: number; por_atribuir: number; conflitos: number; ausencias: number; horas: number; documentacao?: number }
 }
 export type Candidato = {
-  colaborador_id: number; nome: string; vinculo: Vinculo; horas_dia: number; horas_semana: number; pontos: number
+  colaborador_id: number; nome: string; vinculo: Vinculo; muito_curta_duracao?: boolean; horas_dia: number; horas_semana: number; pontos: number
   motivos: string[]; alertas: string[]
 }
 export type Ausencia = {

@@ -114,3 +114,26 @@ def test_marcas_lista_completa_logotipo_e_codigo_erp_da_loja(client, mundo):
     lj = client.post("/api/lojas", headers=h, json={"nome": "Continente Benfica", "codigo_erp": "L0999", "insignia_id": i["id"]}).json()
     assert lj["codigo_erp"] == "L0999" and lj["insignia"]["logo_v"] == 1
     assert [x["nome"] for x in client.get("/api/lojas", headers=h, params={"q": "l0999"}).json()] == ["Continente Benfica"]
+
+
+def test_colaborador_datas_laborais_e_muito_curta_duracao(client, mundo):
+    from app.models import Colaborador
+    mundo.db.commit()
+    h = token(client, "g@t.pt")
+    body = {"numero": "88", "nome": "Vera", "vinculo": "a_termo", "muito_curta_duracao": True,
+            "data_admissao": "2026-10-01", "data_saida": None, "data_inicio": "2026-10-01", "data_fim_vinculo": "2026-11-04"}
+    r = client.post("/api/colaboradores", headers=h, json=body)
+    assert r.status_code == 201 and r.json()["muito_curta_duracao"] and r.json()["data_admissao"] == "2026-10-01"
+    cid = r.json()["id"]
+    assert [c["id"] for c in client.get("/api/colaboradores", headers=h, params={"vinculo": "muito_curta_duracao"}).json()] == [cid]
+    # datas incoerentes e muito curta duração sem termo são recusadas
+    assert client.put(f"/api/colaboradores/{cid}", headers=h, json={**body, "data_saida": "2026-09-01"}).status_code == 422
+    assert client.put(f"/api/colaboradores/{cid}", headers=h, json={**body, "data_fim_vinculo": "2026-09-01"}).status_code == 422
+    assert client.put(f"/api/colaboradores/{cid}", headers=h, json={**body, "vinculo": "sem_termo"}).status_code == 422
+    # recibos verdes: sem datas laborais nem tipo de contrato
+    r = client.put(f"/api/colaboradores/{cid}", headers=h, json={**body, "vinculo": "recibos_verdes"})
+    assert r.status_code == 200
+    mundo.db.expire_all()
+    c = mundo.db.get(Colaborador, cid)
+    assert not c.muito_curta_duracao and c.data_admissao is None and c.data_inicio is None and c.data_fim_vinculo is None
+    assert client.post("/api/colaboradores", headers=h, json={**body, "numero": "89", "vinculo": "muito_curta_duracao"}).status_code == 422

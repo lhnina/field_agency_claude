@@ -35,7 +35,9 @@ def listar(q: str | None = None, vinculo: str | None = None, zona_id: int | None
         for termo in q.split():
             s = s.where(or_(Colaborador.nome.ilike(f"%{termo}%"), Colaborador.numero.ilike(f"%{termo}%"),
                             Colaborador.funcao.ilike(f"%{termo}%")))
-    if vinculo:
+    if vinculo == "muito_curta_duracao":
+        s = s.where(Colaborador.muito_curta_duracao.is_(True))
+    elif vinculo:
         s = s.where(Colaborador.vinculo == vinculo)
     if zona_id:
         s = s.where(Colaborador.zona_id == zona_id)
@@ -95,10 +97,18 @@ def detalhe(cid: int, user: User = Depends(requer("colaboradores.ler")), db: Ses
     return out
 
 
+def _validar(body: ColaboradorIn) -> None:
+    try:
+        body.validar_datas()
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+
 @router.post("/colaboradores", response_model=ColaboradorOut, status_code=201)
 def criar(body: ColaboradorIn, user: User = Depends(requer("colaboradores.editar")), db: Session = Depends(get_db)):
     if db.scalar(select(Colaborador).where(Colaborador.tenant_id == user.tenant_id, Colaborador.numero == body.numero)):
         raise HTTPException(409, f"Já existe um colaborador com o n.º {body.numero}")
+    _validar(body)
     body.funcao = garantir_funcao(db, user.tenant_id, body.funcao)
     c = Colaborador(tenant_id=user.tenant_id, **body.model_dump())
     db.add(c)
@@ -110,6 +120,7 @@ def criar(body: ColaboradorIn, user: User = Depends(requer("colaboradores.editar
 @router.put("/colaboradores/{cid}", response_model=ColaboradorOut)
 def editar(cid: int, body: ColaboradorIn, user: User = Depends(requer("colaboradores.editar")), db: Session = Depends(get_db)):
     c = obter(db, Colaborador, cid, user)
+    _validar(body)
     body.funcao = garantir_funcao(db, user.tenant_id, body.funcao)
     antes = {k: getattr(c, k) for k in body.model_dump()}
     for k, v in body.model_dump().items():

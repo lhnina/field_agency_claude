@@ -177,3 +177,18 @@ def test_filtros_do_planeamento_combinam_com_and(mundo):
     assert [x["id"] for x in v["colaboradores"]] == [mundo.pedro.id]
     assert {o["colaborador_id"] for o in v["ocorrencias"]} == {mundo.pedro.id}
     assert len(v["por_atribuir"]) == 1
+
+
+def test_so_contratos_em_curso_aparecem_no_planeamento(mundo):
+    from app.models import EstadoContrato
+    ln = nova_linha(mundo, [4, 0, 0, 0, 0, 0, 0])
+    op.afetar(mundo.db, mundo.gestor, ln, mundo.ines, SEG)
+    op.gerar_ocorrencias(mundo.db, ln, ate=SEG + timedelta(days=6))
+    assert op.planeamento_semana(mundo.db, mundo.gestor, SEG, op.FiltroPlaneamento())["ocorrencias"]
+    for est in (EstadoContrato.proposta, EstadoContrato.suspenso, EstadoContrato.terminado):
+        mundo.contrato.estado = est
+        mundo.db.flush()
+        assert op.planeamento_semana(mundo.db, mundo.gestor, SEG, op.FiltroPlaneamento())["ocorrencias"] == []
+    mundo.contrato.estado = EstadoContrato.ativo  # retomar: as ocorrências mantêm-se
+    mundo.db.flush()
+    assert op.planeamento_semana(mundo.db, mundo.gestor, SEG, op.FiltroPlaneamento())["ocorrencias"]

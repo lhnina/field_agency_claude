@@ -50,7 +50,7 @@ def custo_hora(c: Colaborador | None, tenant: Tenant | None) -> Decimal:
     if c is None:
         return Z
     base = c.custo_hora or Z
-    return base * (1 + (tenant.encargos_pct(c.vinculo) if tenant else Z) / 100)
+    return base * (1 + (tenant.encargos_colaborador(c) if tenant else Z) / 100)
 
 
 def custos(s: ServicoLogistico, tenant: Tenant | None) -> dict:

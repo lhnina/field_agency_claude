@@ -41,12 +41,16 @@ class Tenant(Base):
     apolice: Mapped[str | None] = mapped_column(String(60))
     apolice_validade: Mapped[date | None] = mapped_column(Date)
 
-    def encargos_pct(self, vinculo: "TipoVinculo") -> Decimal:
+    def encargos_pct(self, vinculo: "TipoVinculo", muito_curta: bool = False) -> Decimal:
+        if muito_curta and vinculo != TipoVinculo.recibos_verdes:
+            return self.encargos_muito_curta_pct or Decimal("0")
         return {
             TipoVinculo.sem_termo: self.encargos_sem_termo_pct, TipoVinculo.a_termo: self.encargos_a_termo_pct,
-            TipoVinculo.muito_curta_duracao: self.encargos_muito_curta_pct,
             TipoVinculo.recibos_verdes: self.encargos_recibos_verdes_pct,
         }[vinculo] or Decimal("0")
+
+    def encargos_colaborador(self, c: "Colaborador") -> Decimal:
+        return self.encargos_pct(c.vinculo, c.muito_curta_duracao)
 
 
 class Perfil(str, enum.Enum):
@@ -157,7 +161,6 @@ class Loja(TenantMixin, Base):
 class TipoVinculo(str, enum.Enum):
     sem_termo = "sem_termo"
     a_termo = "a_termo"
-    muito_curta_duracao = "muito_curta_duracao"
     recibos_verdes = "recibos_verdes"
 
 
@@ -170,8 +173,13 @@ class Colaborador(TenantMixin, Base):
     email: Mapped[str | None] = mapped_column(String(160))
     telefone: Mapped[str | None] = mapped_column(String(30))
     vinculo: Mapped[TipoVinculo] = mapped_column(Enum(TipoVinculo, name="tipo_vinculo"))
-    data_inicio: Mapped[date | None] = mapped_column(Date)
-    data_fim_vinculo: Mapped[date | None] = mapped_column(Date)
+    # Tipo de contrato de trabalho (não é um vínculo): contrato de muito curta duração.
+    muito_curta_duracao: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    # Datas laborais (não se aplicam a recibos verdes)
+    data_admissao: Mapped[date | None] = mapped_column(Date)
+    data_saida: Mapped[date | None] = mapped_column(Date)
+    data_inicio: Mapped[date | None] = mapped_column(Date)  # início do contrato atual
+    data_fim_vinculo: Mapped[date | None] = mapped_column(Date)  # fim do contrato atual
     zona_id: Mapped[int | None] = mapped_column(ForeignKey("zonas.id"), index=True)
     supervisor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
     custo_hora: Mapped[Decimal] = mapped_column(Numeric(8, 2), default=Decimal("0"))

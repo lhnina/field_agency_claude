@@ -25,12 +25,13 @@ export default function ContratoDetalhe() {
   const [linhaEdit, setLinhaEdit] = useState<Linha | 'nova' | null>(null)
   const [afetar, setAfetar] = useState<Linha | null>(null)
   const [editar, setEditar] = useState(false)
+  const [terminar, setTerminar] = useState(false)
   const [verTerminadas, setVerTerminadas] = useState(false)
   const [credencial, setCredencial] = useState<{ colaboradorId: number; linhaId: number } | null>(null)
   const set = (c: Contrato) => { qc.setQueryData(['contrato', c.id], c); qc.invalidateQueries({ queryKey: ['contratos'] }); qc.invalidateQueries({ queryKey: ['planeamento'] }) }
   const estado = useMutation({
     mutationFn: (e: string) => api<Contrato>(`/contratos/${id}/estado`, { method: 'POST', body: { estado: e } }),
-    onSuccess: (c) => { set(c); toast(c.estado === 'ativo' ? 'Contrato ativo: ocorrências geradas no planeamento' : 'Estado atualizado') },
+    onSuccess: (c) => { set(c); toast(c.estado === 'ativo' ? 'Contrato em curso: ocorrências geradas no planeamento' : c.estado === 'suspenso' ? 'Contrato suspenso: sai do planeamento' : c.estado === 'terminado' ? 'Contrato terminado: sai do planeamento' : 'Estado atualizado') },
     onError: (e) => toast(e instanceof Error ? e.message : 'Erro', 'err'),
   })
 
@@ -60,9 +61,10 @@ export default function ContratoDetalhe() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button icon="edit" onClick={() => setEditar(true)}>Editar</Button>
-          {c.estado === 'proposta' && <Button variant="primary" icon="check" loading={estado.isPending} onClick={() => estado.mutate('ativo')}>Ativar contrato</Button>}
+          {c.estado === 'proposta' && <Button variant="primary" icon="check" loading={estado.isPending} onClick={() => estado.mutate('ativo')}>Passar a Em curso</Button>}
           {c.estado === 'ativo' && <Button onClick={() => estado.mutate('suspenso')}>Suspender</Button>}
-          {c.estado === 'suspenso' && <Button variant="primary" onClick={() => estado.mutate('ativo')}>Reativar</Button>}
+          {c.estado === 'suspenso' && <Button variant="primary" icon="check" onClick={() => estado.mutate('ativo')}>Retomar</Button>}
+          {(c.estado === 'ativo' || c.estado === 'suspenso') && <Button onClick={() => setTerminar(true)}>Terminar</Button>}
           {c.estado === 'ativo' && (c.tipo === 'LOG'
             ? <Button variant="primary" icon="truck" onClick={() => nav('/logistica')}>Ver na logística</Button>
             : <Button variant="primary" icon="cal" onClick={() => nav('/planeamento')}>Ver no planeamento</Button>)}
@@ -155,7 +157,7 @@ export default function ContratoDetalhe() {
           </div>
         )}
         <div className="flex flex-wrap items-center gap-4 px-4 py-3 border-t border-line text-[12.5px] text-ink-60">
-          {c.estado === 'proposta' && <span className="flex items-center gap-1.5 text-warn-fg"><Icon name="alert" size={14} />Ative o contrato para gerar as ocorrências no planeamento.</span>}
+          {c.estado === 'proposta' && <span className="flex items-center gap-1.5 text-warn-fg"><Icon name="alert" size={14} />Passe o contrato a Em curso para gerar as ocorrências no planeamento.</span>}
           <span className="flex-1" />
           <span className="num">Total: <b className="text-ink font-semibold">{horas(c.horas_semana)}/semana · {horas(c.horas_mes)}/mês · {eur(c.valor_mensal)}/mês</b></span>
         </div>
@@ -171,6 +173,13 @@ export default function ContratoDetalhe() {
       }} />}
       {credencial && <EmitirCredencialDialog aposAfetacao colaboradorId={credencial.colaboradorId} linhaId={credencial.linhaId} onClose={() => setCredencial(null)} />}
       {editar && <NovoContrato inicial={c} onClose={() => setEditar(false)} onCriado={() => setEditar(false)} />}
+      {terminar && (
+        <Modal title={`Terminar ${c.numero}`} onClose={() => setTerminar(false)} width={460}
+          footer={<><Button variant="ghost" onClick={() => setTerminar(false)}>Cancelar</Button>
+            <Button variant="danger" loading={estado.isPending} onClick={() => estado.mutate('terminado', { onSuccess: () => setTerminar(false) })}>Terminar contrato</Button></>}>
+          <p className="text-[13.5px] text-ink-80">O contrato deixa de aparecer no planeamento{c.tipo === 'LOG' ? ' e na logística' : ''}. Nada é apagado: o histórico, as horas já registadas e a faturação mantêm-se.</p>
+        </Modal>
+      )}
     </>
   )
 }
