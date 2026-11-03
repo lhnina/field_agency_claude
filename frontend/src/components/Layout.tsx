@@ -1,4 +1,6 @@
+import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { MinhaSenhaDialog } from '../pages/Utilizadores'
 import { session } from '../lib/api'
 import { Avatar, Icon } from './ui'
 import type { IconName } from './ui'
@@ -36,6 +38,7 @@ const PERFIL: Record<string, string> = {
 export default function Layout() {
   const user = session.user()
   const nav = useNavigate()
+  const [senha, setSenha] = useState(false)
   return (
     <div className="flex flex-wrap min-h-screen">
       <nav aria-label="Menu principal" className="flex-[1_0_248px] max-w-sidebar bg-petrol-900 text-[#C9D6D3] flex flex-col px-3 pt-[18px] pb-3.5">
@@ -83,11 +86,13 @@ export default function Layout() {
           <span className="flex-1" />
           <button type="button" aria-label="Notificações" className="grid place-items-center w-[38px] h-[38px] rounded-[9px] border border-line text-ink-80 hover:bg-bg"><Icon name="bell" /></button>
           {user && (
-            <div className="flex items-center gap-2.5 text-[13px] leading-tight">
+            <button type="button" onClick={() => setSenha(true)} title="Alterar a minha palavra-passe"
+              className="flex items-center gap-2.5 text-[13px] leading-tight text-left rounded-lg px-1.5 py-1 hover:bg-bg">
               <Avatar nome={user.nome} size={34} />
               <div>{user.nome}<div className="text-xs text-ink-60">{PERFIL[user.perfil] ?? user.perfil}</div></div>
-            </div>
+            </button>
           )}
+          {senha && <MinhaSenhaDialog onClose={() => setSenha(false)} />}
         </header>
         <main className="px-7 pt-6 pb-8 flex flex-col gap-[18px]"><Outlet /></main>
       </div>

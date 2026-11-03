@@ -312,9 +312,11 @@ class PeriodoFechado(TenantMixin, Base):
 class Feriado(Base):
     __tablename__ = "feriados"
     id: Mapped[int] = IdCol()
-    tenant_id: Mapped[int | None] = mapped_column(ForeignKey("tenants.id"))  # null = nacional
+    tenant_id: Mapped[int | None] = mapped_column(ForeignKey("tenants.id"))  # null = nacional (legado; hoje calculados)
+    zona_id: Mapped[int | None] = mapped_column(ForeignKey("zonas.id", ondelete="CASCADE"))  # feriado municipal
     data: Mapped[date] = mapped_column(Date, index=True)
     nome: Mapped[str] = mapped_column(String(80))
+    zona: Mapped[Zona | None] = relationship()
 
 
 class Auditoria(Base):

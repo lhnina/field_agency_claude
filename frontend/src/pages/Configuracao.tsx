@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Button, Card, CardHeader, ErrorBox, Field, Loading, PageHeader, useToast } from '../components/ui'
-import { api } from '../lib/api'
+import { Button, Card, CardHeader, ErrorBox, Field, Loading, PageHeader, Seg, useToast } from '../components/ui'
+import Utilizadores from './Utilizadores'
+import Feriados from './Feriados'
+import { api, session } from '../lib/api'
 import { eur } from '../lib/format'
 
 type Cfg = {
@@ -14,7 +16,7 @@ const ENCARGOS: { k: keyof Cfg; label: string }[] = [
 ]
 const n = (v: string) => Number(String(v).replace(',', '.'))
 
-export default function Configuracao() {
+function Parametros() {
   const qc = useQueryClient()
   const toast = useToast()
   const q = useQuery({ queryKey: ['configuracao'], queryFn: () => api<Cfg>('/configuracao') })
@@ -36,9 +38,7 @@ export default function Configuracao() {
 
   return (
     <>
-      <PageHeader crumb="Configuração" title="Parâmetros da organização" sub={f.nome}>
-        {!ro && <Button variant="primary" icon="check" loading={m.isPending} disabled={invalido} onClick={() => m.mutate(f)}>Guardar</Button>}
-      </PageHeader>
+      {!ro && <div className="flex justify-end -mt-1"><Button variant="primary" icon="check" loading={m.isPending} disabled={invalido} onClick={() => m.mutate(f)}>Guardar parâmetros</Button></div>}
       {ro && <div className="rounded-lg bg-info-bg text-info-fg px-3.5 py-2.5 text-[13px]">Só a Direção ou o Administrador podem alterar estes parâmetros.</div>}
       {m.error ? <ErrorBox error={m.error} /> : null}
       <Card>
@@ -69,6 +69,20 @@ export default function Configuracao() {
           </Field>
         </div>
       </Card>
+    </>
+  )
+}
+
+export default function Configuracao() {
+  const gere = ['administrador', 'direcao'].includes(session.user()?.perfil ?? '')
+  const [tab, setTab] = useState(gere ? 'utilizadores' : 'parametros')
+  const opts = [...(gere ? [{ value: 'utilizadores', label: 'Utilizadores' }] : []), { value: 'feriados', label: 'Feriados' }, { value: 'parametros', label: 'Parâmetros' }]
+  return (
+    <>
+      <PageHeader crumb="Configuração" title="Configuração da organização">
+        <Seg label="Secção" value={tab} onChange={setTab} options={opts} />
+      </PageHeader>
+      {tab === 'utilizadores' ? <Utilizadores /> : tab === 'feriados' ? <Feriados /> : <Parametros />}
     </>
   )
 }

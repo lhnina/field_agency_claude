@@ -18,16 +18,6 @@ from app.models import (
 from app.security import hash_password
 from app.services import operacao as op
 
-FERIADOS = {
-    "Ano Novo": ["2026-01-01", "2027-01-01"], "Sexta-feira Santa": ["2026-04-03", "2027-03-26"],
-    "Páscoa": ["2026-04-05", "2027-03-28"], "Dia da Liberdade": ["2026-04-25", "2027-04-25"],
-    "Dia do Trabalhador": ["2026-05-01", "2027-05-01"], "Corpo de Deus": ["2026-06-04", "2027-05-27"],
-    "Dia de Portugal": ["2026-06-10", "2027-06-10"], "Assunção de Nossa Senhora": ["2026-08-15", "2027-08-15"],
-    "Implantação da República": ["2026-10-05", "2027-10-05"], "Todos os Santos": ["2026-11-01", "2027-11-01"],
-    "Restauração da Independência": ["2026-12-01", "2027-12-01"], "Imaculada Conceição": ["2026-12-08", "2027-12-08"],
-    "Natal": ["2026-12-25", "2027-12-25"],
-}
-
 
 def run(reset: bool = True) -> None:
     if reset:
@@ -41,9 +31,7 @@ def run(reset: bool = True) -> None:
     db.add(t)
     db.flush()
     T = t.id
-    for nome, datas in FERIADOS.items():
-        for d in datas:
-            db.add(Feriado(data=date.fromisoformat(d), nome=nome))
+    # Os feriados nacionais são calculados; aqui só um municipal de exemplo (Amadora, 11 de setembro)
 
     pw = hash_password("demo1234")
     users = {}
@@ -59,6 +47,8 @@ def run(reset: bool = True) -> None:
     ins = {n: Insignia(tenant_id=T, nome=n) for n in ["Continente", "Pingo Doce", "Auchan", "Intermarché", "Lidl"]}
     db.add_all(list(zonas.values()) + list(ins.values()))
     db.flush()
+    for ano in (date.today().year, date.today().year + 1):
+        db.add(Feriado(tenant_id=T, zona_id=zonas["Amadora"].id, data=date(ano, 9, 11), nome="Feriado municipal da Amadora"))
 
     lojas_def = [
         ("Continente Amadora", "Continente", "Amadora", "rui"), ("Continente Colombo", "Continente", "Lisboa", "rui"),

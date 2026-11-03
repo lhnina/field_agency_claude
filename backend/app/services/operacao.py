@@ -68,11 +68,9 @@ def afetacao_em(linha: LinhaContrato, d: date) -> Afetacao | None:
     return None
 
 
-def feriados_entre(db: Session, tenant_id: int, ini: date, fim: date) -> set[date]:
-    rows = db.scalars(select(Feriado.data).where(
-        Feriado.data.between(ini, fim), or_(Feriado.tenant_id.is_(None), Feriado.tenant_id == tenant_id)
-    )).all()
-    return set(rows)
+def feriados_entre(db: Session, tenant_id: int, ini: date, fim: date, zona_id: int | None = None) -> set[date]:
+    from app.services.feriados import feriados_entre as _f  # import local: evita ciclo
+    return _f(db, tenant_id, ini, fim, zona_id)
 
 
 def _dia_reagendado(linha: LinhaContrato, d: date, feriados: set[date], fim: date) -> date | None:
@@ -105,7 +103,7 @@ def gerar_ocorrencias(db: Session, linha: LinhaContrato, ate: date, desde: date 
     fim = min(x for x in (ate, linha.fim, c.fim) if x is not None)
     if fim < ini:
         return 0
-    feriados = feriados_entre(db, linha.tenant_id, ini, fim + timedelta(days=7))
+    feriados = feriados_entre(db, linha.tenant_id, ini, fim + timedelta(days=7), linha.loja.zona_id if linha.loja else None)
     existentes = set(db.scalars(select(Ocorrencia.data_original).where(
         Ocorrencia.linha_id == linha.id, Ocorrencia.data_original.between(ini, fim))).all())
     criadas = 0

@@ -14,7 +14,9 @@ Plataforma de gestão operacional para agências de field marketing: reposição
 - apuramento de remunerações com exportação CSV para o PHC;
 - fecho e reabertura de períodos;
 - contador da muito curta duração;
-- importação inicial por Excel de clientes, lojas, colaboradores e contratos (menu **Importar dados**).
+- importação inicial por Excel de clientes, lojas, colaboradores e contratos (menu **Importar dados**);
+- gestão de utilizadores e perfis, com alteração da própria palavra-passe;
+- feriados nacionais calculados para qualquer ano e feriados municipais por zona (menu **Configuração**).
 
 Referências:
 
@@ -85,7 +87,8 @@ frontend/
 | As horas de cada linha são definidas por dia da semana (Seg a Dom). | Q2 |
 | Horas/mês = horas/semana × 52 ÷ 12. Valor mensal = horas/mês × preço/hora. | Q3 |
 | O custo/hora vem da ficha do colaborador; cada linha pode ter um custo especial. | Q6 |
-| Feriado: o serviço passa para outro dia, de preferência o próximo dia útil da mesma semana sem horas nessa linha. | Q9 |
+| Feriado: o serviço passa para outro dia, de preferência o próximo dia útil da mesma semana sem horas nessa linha. Os feriados nacionais são calculados para qualquer ano, incluindo a Páscoa, a Sexta-feira Santa e o Corpo de Deus. Os municipais aplicam-se às lojas da zona. Criar um feriado reagenda os serviços já planeados nessa data. | Q9 |
+| Utilizadores: a Direção e o Administrador gerem utilizadores; só um Administrador cria ou altera administradores. Ninguém se desativa a si próprio e tem de ficar sempre um Administrador ativo. Palavras-passe com pelo menos 8 caracteres, letras e números. | §20 |
 | Limites de 8 h/dia e 40 h/semana, sem IRCT aplicável. São alertas e não bloqueiam. Não se aplicam a recibos verdes. | Q15, Q16 |
 | A afetação é **persistente**: o colaborador fica na loja até ao fim do contrato. | Master prompt §7 |
 | A substituição altera só aquele turno. O histórico guarda o colaborador previsto e o efetivo. | Master prompt §12 |
