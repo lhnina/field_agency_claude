@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, Seg, useToast } from '../components/ui'
 import { DataInput } from '../components/DataInput'
+import { Credenciais, ModelosCredencial } from './Credenciais'
 import { abrirFicheiro, api, apiForm, session } from '../lib/api'
 import { dataCurta } from '../lib/format'
 import type { DocumentoReg, EstadoDocumento, IdNome, Requisito, ResumoDoc, SituacaoDoc, TipoDocumento } from '../lib/types'
@@ -24,9 +25,11 @@ export default function Documentacao() {
     <>
       <PageHeader crumb="Pessoas" title="Documentação" sub="Documentos dos colaboradores, validades e requisitos por função, cliente e cadeia.">
         <Seg label="Secção" value={tab} onChange={setTab} options={[
-          { value: 'documentos', label: 'Documentos' }, { value: 'tipos', label: 'Tipos de documento' }, { value: 'requisitos', label: 'Requisitos' }]} />
+          { value: 'documentos', label: 'Documentos' }, { value: 'credenciais', label: 'Credenciais' }, { value: 'tipos', label: 'Tipos de documento' },
+          { value: 'requisitos', label: 'Requisitos' }, { value: 'modelos', label: 'Modelos de credencial' }]} />
       </PageHeader>
-      {tab === 'documentos' ? <Documentos /> : tab === 'tipos' ? <Tipos /> : <Requisitos />}
+      {tab === 'documentos' ? <Documentos /> : tab === 'credenciais' ? <Credenciais /> : tab === 'modelos' ? <ModelosCredencial />
+        : tab === 'tipos' ? <Tipos /> : <Requisitos />}
     </>
   )
 }

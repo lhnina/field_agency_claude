@@ -80,3 +80,19 @@ export async function abrirFicheiro(path: string) {
   else window.location.assign(url)
   setTimeout(() => URL.revokeObjectURL(url), 60_000)
 }
+
+/** Descarrega um ficheiro protegido com o nome dado pelo servidor. */
+export async function descarregar(path: string, nome = 'ficheiro') {
+  const headers: Record<string, string> = {}
+  const t = session.token()
+  if (t) headers.Authorization = `Bearer ${t}`
+  const r = await fetch('/api' + path, { headers })
+  if (!r.ok) throw new ApiError(r.status, mensagem(await r.json().catch(() => null), r.status))
+  const cd = r.headers.get('Content-Disposition') ?? ''
+  const m = cd.match(/filename\*=UTF-8''([^;]+)/i) ?? cd.match(/filename="?([^";]+)"?/i)
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(await r.blob())
+  a.download = m ? decodeURIComponent(m[1]) : nome
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000)
+}

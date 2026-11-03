@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Avatar, Badge, Bar, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, useToast } from '../components/ui'
 import { DataInput } from '../components/DataInput'
+import { CredenciaisColaborador } from './Credenciais'
 import { abrirFicheiro, api } from '../lib/api'
 import { DocumentoDialog, ESTADO_DOC, podeRegistarDocs } from './Documentacao'
 import { BotaoEstado, MostrarInativos } from '../components/Estado'
@@ -106,6 +107,7 @@ export default function Colaboradores() {
             <Afetacoes id={atual.id} total={Number(atual.horas_afetadas)} prestador={atual.vinculo === 'recibos_verdes'}
               onPlaneamento={() => nav(`/planeamento?colaborador=${atual.id}${atual.zona_id ? `&zona=${atual.zona_id}` : ''}`)} />
             <DocumentosColab id={atual.id} nome={atual.nome} />
+            <CredenciaisColaborador id={atual.id} nome={atual.nome} />
             <div className="px-[18px] py-3.5 border-t border-line-soft">
               <div className="text-[13px] font-semibold mb-2">Disponibilidade semanal</div>
               <Disp d={atual.disponibilidade} big />
@@ -239,6 +241,7 @@ function ColabDialog({ c, onClose }: { c: Colaborador | null; onClose: () => voi
     numero: c?.numero ?? '', nome: c?.nome ?? '', funcao: c?.funcao ?? '', email: c?.email ?? '', telefone: c?.telefone ?? '',
     vinculo: (c?.vinculo ?? 'a_termo') as Vinculo, data_inicio: c?.data_inicio ?? '', zona_id: c?.zona_id ? String(c.zona_id) : '',
     supervisor_id: c?.supervisor_id ? String(c.supervisor_id) : '', custo_hora: c?.custo_hora ?? '', disponibilidade: c?.disponibilidade ?? '1111100',
+    data_nascimento: c?.data_nascimento ?? '', numero_identificacao: c?.numero_identificacao ?? '', niss: c?.niss ?? '',
   })
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.value })
   const m = useMutation({
@@ -246,7 +249,8 @@ function ColabDialog({ c, onClose }: { c: Colaborador | null; onClose: () => voi
       method: c ? 'PUT' : 'POST',
       body: { ...f, funcao: f.funcao || null, email: f.email || null, telefone: f.telefone || null, data_inicio: f.data_inicio || null,
         zona_id: f.zona_id ? Number(f.zona_id) : null, supervisor_id: f.supervisor_id ? Number(f.supervisor_id) : null,
-        custo_hora: Number(String(f.custo_hora).replace(',', '.')) || 0, ativo: c?.ativo ?? true },
+        custo_hora: Number(String(f.custo_hora).replace(',', '.')) || 0, ativo: c?.ativo ?? true,
+        data_nascimento: f.data_nascimento || null, numero_identificacao: f.numero_identificacao.trim() || null, niss: f.niss.trim() || null },
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['colaboradores'] }); toast(c ? 'Ficha atualizada' : 'Colaborador criado'); onClose() },
   })
@@ -267,6 +271,12 @@ function ColabDialog({ c, onClose }: { c: Colaborador | null; onClose: () => voi
         <Field label="Data de início">{(id) => <DataInput id={id} limpar value={f.data_inicio} onChange={(v) => setF({ ...f, data_inicio: v })} />}</Field>
         <Field label="Telemóvel">{(id) => <input id={id} className="inp" value={f.telefone} onChange={set('telefone')} />}</Field>
         <Field label="Email">{(id) => <input id={id} type="email" className="inp" value={f.email} onChange={set('email')} />}</Field>
+        <div className="col-span-2 grid grid-cols-3 gap-3.5 pt-1 border-t border-line-soft">
+          <div className="col-span-3 text-xs text-ink-60 pt-2">Identificação (usada nas credenciais)</div>
+          <Field label="Data de nascimento">{(id) => <DataInput id={id} limpar value={f.data_nascimento} max={new Date().toISOString().slice(0, 10)} onChange={(v) => setF({ ...f, data_nascimento: v })} />}</Field>
+          <Field label="N.º de identificação" hint="Vazio = n.º do Cartão de Cidadão registado">{(id) => <input id={id} className="inp num" value={f.numero_identificacao} onChange={set('numero_identificacao')} />}</Field>
+          <Field label="N.º Segurança Social">{(id) => <input id={id} inputMode="numeric" className="inp num" value={f.niss} onChange={set('niss')} />}</Field>
+        </div>
         <div className="col-span-2">
           <div className="lbl mb-1.5">Disponibilidade semanal</div>
           <div className="flex gap-1.5">

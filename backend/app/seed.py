@@ -13,7 +13,7 @@ from sqlalchemy import select, text
 
 from app.db import Base, SessionLocal, engine
 from app.models import (
-    Ausencia, Cliente, Colaborador, Contrato, DocumentoColaborador, EstadoContrato, Feriado, Insignia, LinhaContrato, Loja,
+    Ausencia, Cliente, Colaborador, Contrato, DocumentoColaborador, ModeloCredencial, EstadoContrato, Feriado, Insignia, LinhaContrato, Loja,
     Marca, Perfil, RequisitoDocumental, Tenant, TipoAusencia, TipoContrato, TipoDocumento, TipoVinculo, User, Zona,
 )
 from app.security import hash_password
@@ -28,7 +28,10 @@ def run(reset: bool = True) -> None:
     db = SessionLocal()
     # Encargos de demonstração (ajustáveis em Configuração): trabalhadores +40 %, prestadores 0 %
     t = Tenant(nome="Promovida Field Services", nif="509000000", encargos_sem_termo_pct=D("40"), encargos_a_termo_pct=D("40"),
-               encargos_muito_curta_pct=D("40"), encargos_recibos_verdes_pct=D("0"))
+               encargos_muito_curta_pct=D("40"), encargos_recibos_verdes_pct=D("0"),
+               morada="Avenida da República, 50, 3.º", codigo_postal="1050-196", localidade="Lisboa",
+               registo_comercial="matriculada na Conservatória do Registo Comercial de Lisboa sob o n.º 509000000",
+               seguradora="Fidelidade – Companhia de Seguros, S.A.", apolice="AT-2026-0045871", apolice_validade=date(2026, 12, 31))
     db.add(t)
     db.flush()
     T = t.id
@@ -186,6 +189,7 @@ def run(reset: bool = True) -> None:
         if i % 7 == 2:
             fecho.registar_execucao(db, users["rui"], o, max(o.horas_planeadas - D("1"), D("0")), "Saiu mais cedo (loja sem stock)", hoje)
     _documentacao(db, T, cols, clientes, ins, users["hugo"], hoje)
+    _credenciais(db, T, cols, users["hugo"], hoje)
     db.commit()
     db.close()
     print("Dados de demonstração criados. Utilizadores: marta|hugo|joana|tomas|rui|sara|admin@promovida.pt / demo1234")
@@ -214,7 +218,8 @@ def _documentacao(db, T, cols, clientes, ins, autor, hoje) -> None:
     """Tipos, requisitos e documentos de demonstração, com alguns expirados, a expirar e em falta."""
     tipos = {}
     for nome, val, aviso in [("Cartão de Cidadão", True, 60), ("Formação HACCP", True, 30), ("Registo criminal", True, 30),
-                             ("Seguro de acidentes pessoais", True, 30), ("Declaração de início de atividade", False, 0)]:
+                             ("Seguro de acidentes pessoais", True, 30), ("Declaração de início de atividade", False, 0),
+                             ("Exame médico (ficha de aptidão)", True, 30)]:
         tipos[nome] = TipoDocumento(tenant_id=T, nome=nome, tem_validade=val, dias_aviso=aviso)
     db.add_all(tipos.values())
     db.flush()
@@ -234,16 +239,35 @@ def _documentacao(db, T, cols, clientes, ins, autor, hoje) -> None:
         ("Ana Lopes", "Cartão de Cidadão", d(1100), True), ("Beatriz Nunes", "Cartão de Cidadão", d(-5), False),
         ("Marco Dias", "Cartão de Cidadão", d(25), True), ("Marco Dias", "Seguro de acidentes pessoais", d(150), True),
         ("Rita Gonçalves", "Cartão de Cidadão", d(500), True), ("Rita Gonçalves", "Registo criminal", d(10), False),
+        ("Inês Carvalho", "Exame médico (ficha de aptidão)", d(300), False), ("Pedro Almeida", "Exame médico (ficha de aptidão)", d(200), False),
+        ("Marco Dias", "Exame médico (ficha de aptidão)", d(120), False), ("Carla Sousa", "Exame médico (ficha de aptidão)", d(250), False),
     ]  # o Tiago Moreira não entregou nada
     for nome, tipo, val, anexo in docs:
         doc = DocumentoColaborador(tenant_id=T, colaborador_id=cols[nome].id, tipo_documento_id=tipos[tipo].id,
                                    numero=f"{zlib.crc32(nome.encode()) % 10**8:08d}" if tipo == "Cartão de Cidadão" else None,
-                                   emissao=(val - timedelta(days=365 * 5)) if val else d(-400), validade=val, criado_por_id=autor.id)
+                                   emissao=(val - timedelta(days=365 if tipo.startswith("Exame") else 365 * 5)) if val else d(-400), validade=val, criado_por_id=autor.id)
         if anexo:
             doc.ficheiro = _pdf(f"{tipo} - {nome}")
             doc.ficheiro_nome = f"{tipo} - {nome}.pdf"
             doc.ficheiro_tipo, doc.ficheiro_tamanho = "application/pdf", len(doc.ficheiro)
         db.add(doc)
+    db.flush()
+
+
+
+def _credenciais(db, T, cols, autor, hoje) -> None:
+    """Modelo de credencial (a partir do modelo do cliente) e dados de identificação dos colaboradores."""
+    from pathlib import Path
+    ficheiro = (Path(__file__).parent / "assets" / "credencial_modelo.docx").read_bytes()
+    db.add(ModeloCredencial(tenant_id=T, nome="Credencial padrão", versao=1, atual=True, ativo=True,
+                            notas="Modelo inicial, adaptado da credencial em uso", ficheiro_nome="Credencial padrão.docx",
+                            ficheiro_tamanho=len(ficheiro), ficheiro=ficheiro, criado_por_id=autor.id))
+    nasc = {"Inês Carvalho": date(1996, 4, 12), "Pedro Almeida": date(1988, 9, 3), "Sofia Martins": date(2001, 1, 27),
+            "Carla Sousa": date(1979, 11, 30), "Marco Dias": date(1992, 6, 18), "Ana Lopes": date(1990, 2, 8),
+            "Rita Gonçalves": date(1998, 7, 21), "Beatriz Nunes": date(1985, 5, 5)}
+    for nome, dn in nasc.items():
+        cols[nome].data_nascimento = dn
+        cols[nome].niss = f"1{zlib.crc32(nome.encode()) % 10**10:010d}"
     db.flush()
 
 

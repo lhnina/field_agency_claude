@@ -22,6 +22,7 @@ export type Colaborador = {
   vinculo: Vinculo; data_inicio: string | null; data_fim_vinculo: string | null; zona_id: number | null
   supervisor_id: number | null; custo_hora: string; disponibilidade: string; ativo: boolean; zona: IdNome | null
   horas_afetadas: string
+  data_nascimento: string | null; numero_identificacao: string | null; niss: string | null
 }
 
 export type Afetacao = { id: number; colaborador_id: number; colaborador_nome: string; desde: string; ate: string | null }
@@ -84,3 +85,19 @@ export type SituacaoDoc = {
   estado: EstadoDocumento; documento: DocumentoReg | null
 }
 export type ResumoDoc = { expirados: number; em_falta: number; a_expirar: number; validos: number; colaboradores_com_problemas: number }
+
+export type EstadoCredencial = 'emitida' | 'substituida' | 'anulada'
+export type CredencialT = {
+  id: number; numero: string; colaborador_id: number; colaborador: string; colaborador_numero: string; loja_id: number; loja: string
+  cliente_id: number; cliente: string; linha_id: number | null; emitida_em: string; valida_ate: string | null; estado: EstadoCredencial
+  substitui: string | null; motivo: string | null; modelo: string; ficheiro_nome: string
+}
+export type ModeloCredencialT = {
+  id: number; nome: string; versao: number; atual: boolean; ativo: boolean; notas: string | null; cliente_id: number | null
+  cliente: string | null; ficheiro_nome: string; ficheiro_tamanho: number; criado_em: string | null; criado_por: string | null
+}
+export type PrepararCredencial = {
+  colaborador: string; loja: string; cliente: string; contrato: string; modelo: { id: number; nome: string; versao: number } | null
+  modelos: { id: number; nome: string; versao: number; cliente: boolean }[]; aviso_modelo: string | null; validade: string
+  data_exame_medico: string | null; em_falta: string[]; substituiveis: CredencialT[]
+}

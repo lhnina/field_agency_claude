@@ -126,6 +126,10 @@ class ColaboradorIn(BaseModel):
     custo_hora: Decimal = Decimal("0")
     disponibilidade: str = "1111100"
     ativo: bool = True
+    # identificação, usada nas credenciais
+    data_nascimento: date | None = None
+    numero_identificacao: str | None = Field(default=None, max_length=30)
+    niss: str | None = Field(default=None, max_length=20)
 
     @field_validator("disponibilidade")
     @classmethod

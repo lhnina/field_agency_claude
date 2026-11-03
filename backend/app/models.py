@@ -32,6 +32,14 @@ class Tenant(Base):
     encargos_a_termo_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("0"), server_default="0")
     encargos_muito_curta_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("0"), server_default="0")
     encargos_recibos_verdes_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("0"), server_default="0")
+    # Dados da empresa usados nas credenciais
+    morada: Mapped[str | None] = mapped_column(String(250))
+    codigo_postal: Mapped[str | None] = mapped_column(String(10))
+    localidade: Mapped[str | None] = mapped_column(String(80))
+    registo_comercial: Mapped[str | None] = mapped_column(String(250))
+    seguradora: Mapped[str | None] = mapped_column(String(160))
+    apolice: Mapped[str | None] = mapped_column(String(60))
+    apolice_validade: Mapped[date | None] = mapped_column(Date)
 
     def encargos_pct(self, vinculo: "TipoVinculo") -> Decimal:
         return {
@@ -157,6 +165,10 @@ class Colaborador(TenantMixin, Base):
     # disponibilidade semanal: 7 caracteres '1'/'0' de segunda a domingo
     disponibilidade: Mapped[str] = mapped_column(String(7), default="1111100")
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Identificação (credenciais). Dados pessoais: acesso restrito (RGPD).
+    data_nascimento: Mapped[date | None] = mapped_column(Date)
+    numero_identificacao: Mapped[str | None] = mapped_column(String(30))
+    niss: Mapped[str | None] = mapped_column(String(20))
     zona: Mapped[Zona | None] = relationship()
 
 
@@ -396,3 +408,55 @@ class Auditoria(Base):
     acao: Mapped[str] = mapped_column(String(40))
     detalhe: Mapped[str | None] = mapped_column(Text)  # JSON antes/depois
     criado_em: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+# ---------------------------------------------------------------- credenciais
+class ModeloCredencial(TenantMixin, Base):
+    """Modelo Word (.docx) da credencial. Cada novo carregamento com o mesmo nome é uma nova versão;
+    as versões anteriores ficam guardadas (as credenciais emitidas apontam para a versão usada)."""
+    __tablename__ = "modelos_credencial"
+    id: Mapped[int] = IdCol()
+    nome: Mapped[str] = mapped_column(String(120))
+    cliente_id: Mapped[int | None] = mapped_column(ForeignKey("clientes.id"))  # vazio = modelo geral
+    versao: Mapped[int] = mapped_column(Integer, default=1)
+    atual: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    notas: Mapped[str | None] = mapped_column(String(250))
+    ficheiro_nome: Mapped[str] = mapped_column(String(200))
+    ficheiro_tamanho: Mapped[int] = mapped_column(Integer, default=0)
+    ficheiro: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    cliente: Mapped[Cliente | None] = relationship()
+    criado_por: Mapped[User | None] = relationship()
+
+
+class EstadoCredencial(str, enum.Enum):
+    emitida = "emitida"
+    substituida = "substituida"
+    anulada = "anulada"
+
+
+class Credencial(TenantMixin, Base):
+    """Credencial emitida para um colaborador numa loja (a partir de uma versão de modelo)."""
+    __tablename__ = "credenciais"
+    id: Mapped[int] = IdCol()
+    numero: Mapped[str] = mapped_column(String(20), index=True)
+    colaborador_id: Mapped[int] = mapped_column(ForeignKey("colaboradores.id"), index=True)
+    linha_id: Mapped[int | None] = mapped_column(ForeignKey("linhas_contrato.id"))
+    loja_id: Mapped[int] = mapped_column(ForeignKey("lojas.id"), index=True)
+    cliente_id: Mapped[int] = mapped_column(ForeignKey("clientes.id"), index=True)
+    modelo_id: Mapped[int] = mapped_column(ForeignKey("modelos_credencial.id"))
+    emitida_em: Mapped[date] = mapped_column(Date)
+    valida_ate: Mapped[date | None] = mapped_column(Date)
+    estado: Mapped[EstadoCredencial] = mapped_column(Enum(EstadoCredencial, name="estado_credencial"), default=EstadoCredencial.emitida)
+    substitui_id: Mapped[int | None] = mapped_column(ForeignKey("credenciais.id"))
+    motivo: Mapped[str | None] = mapped_column(String(250))
+    dados: Mapped[str | None] = mapped_column(Text)  # JSON dos valores usados
+    ficheiro_nome: Mapped[str] = mapped_column(String(200))
+    ficheiro: Mapped[bytes] = mapped_column(LargeBinary, deferred=True)
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    colaborador: Mapped[Colaborador] = relationship()
+    loja: Mapped[Loja] = relationship()
+    cliente: Mapped[Cliente] = relationship()
+    modelo: Mapped[ModeloCredencial] = relationship()
+    substitui: Mapped["Credencial | None"] = relationship(remote_side="Credencial.id")

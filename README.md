@@ -138,6 +138,12 @@ Para cada tipo:
 
 Clientes, lojas e colaboradores que já existem são atualizados; as células vazias não apagam valores. Os contratos são sempre criados de novo: as linhas com a mesma "Referência" formam um contrato. Contratos ativos geram logo o planeamento.
 
+## Documentação e credenciais
+
+- **Documentação** (menu Pessoas): tipos de documento configuráveis, requisitos por função, cliente e cadeia, validades com aviso, anexos guardados (PDF ou imagem, com registo de cada descarga). A falta de documentação só gera alertas no planeamento, nunca bloqueia.
+- **Credenciais**: emitidas a partir de modelos Word (.docx) guardados e versionados (Documentação › Modelos de credencial). Os campos escrevem-se no Word como `{{nome}}`; os campos de impressão em série (MERGEFIELD) do modelo antigo também funcionam. Ao afetar um colaborador a uma loja, a plataforma pergunta se quer emitir uma credencial nova ou por substituição. Cada credencial fica guardada na ficha do colaborador, com a versão do modelo usada.
+- Os dados da empresa usados nas credenciais (sede, registo, seguradora e apólice) estão em Configuração › Parâmetros.
+
 ## Próximos passos
 
 - Documentação com validades (B17) e alertas no planeamento.

@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { LojaPicker } from '../components/LojaPicker'
 import { ColaboradorPicker } from '../components/ColaboradorPicker'
+import { EmitirCredencialDialog, podeEmitir } from './Credenciais'
 import { AreaBadge, Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, useToast } from '../components/ui'
 import { DataInput } from '../components/DataInput'
 import { api } from '../lib/api'
@@ -23,6 +24,7 @@ export default function ContratoDetalhe() {
   const [afetar, setAfetar] = useState<Linha | null>(null)
   const [editar, setEditar] = useState(false)
   const [verTerminadas, setVerTerminadas] = useState(false)
+  const [credencial, setCredencial] = useState<{ colaboradorId: number; linhaId: number } | null>(null)
   const set = (c: Contrato) => { qc.setQueryData(['contrato', c.id], c); qc.invalidateQueries({ queryKey: ['contratos'] }); qc.invalidateQueries({ queryKey: ['planeamento'] }) }
   const estado = useMutation({
     mutationFn: (e: string) => api<Contrato>(`/contratos/${id}/estado`, { method: 'POST', body: { estado: e } }),
@@ -145,7 +147,13 @@ export default function ContratoDetalhe() {
       </Card>
 
       {linhaEdit && <LinhaDialog contrato={c} linha={linhaEdit === 'nova' ? null : linhaEdit} onClose={() => setLinhaEdit(null)} onSaved={(x) => { set(x); setLinhaEdit(null) }} />}
-      {afetar && <AfetarDialog linha={afetar} onClose={() => setAfetar(null)} onSaved={(x) => { set(x); setAfetar(null) }} />}
+      {afetar && <AfetarDialog linha={afetar} onClose={() => setAfetar(null)} onSaved={(x, colaboradorId) => {
+        set(x)
+        // logo a seguir a uma afetação, pergunta pela credencial (nova ou por substituição)
+        if (colaboradorId && podeEmitir()) setCredencial({ colaboradorId, linhaId: afetar.id })
+        setAfetar(null)
+      }} />}
+      {credencial && <EmitirCredencialDialog aposAfetacao colaboradorId={credencial.colaboradorId} linhaId={credencial.linhaId} onClose={() => setCredencial(null)} />}
       {editar && <NovoContrato inicial={c} onClose={() => setEditar(false)} onCriado={() => setEditar(false)} />}
     </>
   )
@@ -218,14 +226,14 @@ function LinhaDialog({ contrato, linha, onClose, onSaved }: { contrato: Contrato
   )
 }
 
-function AfetarDialog({ linha, onClose, onSaved }: { linha: Linha; onClose: () => void; onSaved: (c: Contrato) => void }) {
+function AfetarDialog({ linha, onClose, onSaved }: { linha: Linha; onClose: () => void; onSaved: (c: Contrato, colaboradorId?: number) => void }) {
   const toast = useToast()
   const [colab, setColab] = useState<{ id: number; nome: string } | null>(linha.afetacao_atual ? { id: linha.afetacao_atual.colaborador_id, nome: linha.afetacao_atual.colaborador_nome } : null)
   const [desde, setDesde] = useState(linha.inicio > iso(new Date()) ? linha.inicio : iso(new Date()))
   const [ate, setAte] = useState('')
   const m = useMutation({
     mutationFn: () => api<Contrato>(`/linhas/${linha.id}/afetacao`, { method: 'POST', body: { colaborador_id: colab!.id, desde, ate: ate || null } }),
-    onSuccess: (c) => { toast('Afetação guardada; planeamento atualizado'); onSaved(c) },
+    onSuccess: (c) => { toast('Afetação guardada; planeamento atualizado'); onSaved(c, colab!.id) },
   })
   const remover = useMutation({
     mutationFn: () => api<Contrato>(`/linhas/${linha.id}/afetacao`, { method: 'DELETE', params: { desde } }),

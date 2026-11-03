@@ -5,9 +5,14 @@ import Utilizadores from './Utilizadores'
 import Feriados from './Feriados'
 import { api, session } from '../lib/api'
 import { eur } from '../lib/format'
+import { DataInput } from '../components/DataInput'
 
+type Empresa = {
+  nome: string; nif: string | null; morada: string | null; codigo_postal: string | null; localidade: string | null
+  registo_comercial: string | null; seguradora: string | null; apolice: string | null; apolice_validade: string | null
+}
 type Cfg = {
-  nome: string; pode_editar: boolean; aceitacao_tacita: boolean; limite_margem_pct: string
+  nome: string; pode_editar: boolean; empresa: Empresa; aceitacao_tacita: boolean; limite_margem_pct: string
   encargos_sem_termo_pct: string; encargos_a_termo_pct: string; encargos_muito_curta_pct: string; encargos_recibos_verdes_pct: string
 }
 const ENCARGOS: { k: keyof Cfg; label: string }[] = [
@@ -15,6 +20,35 @@ const ENCARGOS: { k: keyof Cfg; label: string }[] = [
   { k: 'encargos_muito_curta_pct', label: 'Muito curta duração' }, { k: 'encargos_recibos_verdes_pct', label: 'Recibos verdes' },
 ]
 const n = (v: string) => Number(String(v).replace(',', '.'))
+
+/** Dados da empresa usados nas credenciais (nome, sede, registo, seguro de acidentes de trabalho). */
+function EmpresaCard({ cfg, ro }: { cfg: Cfg; ro: boolean }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [e, setE] = useState<Empresa>(cfg.empresa)
+  const m = useMutation({
+    mutationFn: () => api<Cfg>('/configuracao/empresa', { method: 'PUT', body: Object.fromEntries(Object.entries(e).map(([k, v]) => [k, v === '' ? null : v])) }),
+    onSuccess: (c) => { qc.setQueryData(['configuracao'], c); toast('Dados da empresa guardados') },
+  })
+  const txt = (k: keyof Empresa, label: string, cls = '') => (
+    <Field label={label} className={cls}>{(id) => <input id={id} className="inp" disabled={ro} value={e[k] ?? ''} onChange={(ev) => setE({ ...e, [k]: ev.target.value })} />}</Field>
+  )
+  return (
+    <Card>
+      <CardHeader title="Empresa" meta="Dados que aparecem nas credenciais">
+        {!ro && <Button size="sm" variant="primary" icon="check" loading={m.isPending} disabled={!e.nome.trim()} onClick={() => m.mutate()}>Guardar empresa</Button>}
+      </CardHeader>
+      <div className="p-[18px] grid grid-cols-2 lg:grid-cols-4 gap-4 max-w-[1000px]">
+        {txt('nome', 'Nome da empresa', 'col-span-2')}{txt('nif', 'NIF')}<span />
+        {txt('morada', 'Sede (morada)', 'col-span-2')}{txt('codigo_postal', 'Código postal')}{txt('localidade', 'Localidade')}
+        {txt('registo_comercial', 'Registo comercial', 'col-span-2 lg:col-span-4')}
+        {txt('seguradora', 'Seguradora (acidentes de trabalho)', 'col-span-2')}{txt('apolice', 'N.º da apólice')}
+        <Field label="Apólice válida até">{(id) => <DataInput id={id} limpar value={e.apolice_validade ?? ''} onChange={(v) => setE({ ...e, apolice_validade: v || null })} />}</Field>
+      </div>
+      {m.error ? <div className="px-[18px] pb-4"><ErrorBox error={m.error} /></div> : null}
+    </Card>
+  )
+}
 
 function Parametros() {
   const qc = useQueryClient()
@@ -41,6 +75,7 @@ function Parametros() {
       {!ro && <div className="flex justify-end -mt-1"><Button variant="primary" icon="check" loading={m.isPending} disabled={invalido} onClick={() => m.mutate(f)}>Guardar parâmetros</Button></div>}
       {ro && <div className="rounded-lg bg-info-bg text-info-fg px-3.5 py-2.5 text-[13px]">Só a Direção ou o Administrador podem alterar estes parâmetros.</div>}
       {m.error ? <ErrorBox error={m.error} /> : null}
+      <EmpresaCard cfg={f} ro={ro} />
       <Card>
         <CardHeader title="Encargos sociais sobre o custo/hora" meta="TSU, seguro de acidentes de trabalho, proporcionais de férias e subsídios" />
         <div className="p-[18px] flex flex-col gap-4">
