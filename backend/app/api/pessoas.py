@@ -25,17 +25,22 @@ def _scope(s, user: User):
 
 @router.get("/colaboradores", response_model=list[ColaboradorOut])
 def listar(q: str | None = None, vinculo: str | None = None, zona_id: int | None = None, inativos: bool = False,
-           user: User = Depends(requer("colaboradores.ler")), db: Session = Depends(get_db)):
+           limite: int | None = None, user: User = Depends(requer("colaboradores.ler")), db: Session = Depends(get_db)):
     s = _scope(select(Colaborador).where(Colaborador.tenant_id == user.tenant_id), user)
     if not inativos:
         s = s.where(Colaborador.ativo.is_(True))
     if q:
-        s = s.where(or_(Colaborador.nome.ilike(f"%{q}%"), Colaborador.numero.ilike(f"%{q}%")))
+        for termo in q.split():
+            s = s.where(or_(Colaborador.nome.ilike(f"%{termo}%"), Colaborador.numero.ilike(f"%{termo}%"),
+                            Colaborador.funcao.ilike(f"%{termo}%")))
     if vinculo:
         s = s.where(Colaborador.vinculo == vinculo)
     if zona_id:
         s = s.where(Colaborador.zona_id == zona_id)
-    out = [ColaboradorOut.model_validate(c) for c in db.scalars(s.order_by(Colaborador.ativo.desc(), Colaborador.nome)).all()]
+    s = s.order_by(Colaborador.ativo.desc(), Colaborador.nome)
+    if limite:
+        s = s.limit(min(limite, 200))
+    out = [ColaboradorOut.model_validate(c) for c in db.scalars(s).all()]
     carga = _carga(db, [c.id for c in out])
     for c in out:
         c.horas_afetadas = carga.get(c.id, Decimal("0"))

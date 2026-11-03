@@ -1,0 +1,28 @@
+const { chromium } = require('playwright');
+(async () => {
+  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1600, height: 900 } })
+  const erros = []; p.on('pageerror', (e) => erros.push(e.message)); p.on('console', (m) => m.type() === 'error' && erros.push(m.text()))
+  await p.goto('http://localhost:5173/login')
+  await p.fill('input[type=email]', 'hugo@promovida.pt'); await p.fill('input[type=password]', 'demo1234'); await p.click('button[type=submit]')
+  await p.waitForURL('http://localhost:5173/'); await p.goto('http://localhost:5173/contratos')
+  await p.getByText('Nata Doce Gelados').first().click(); await p.waitForURL(/contratos\/\d+/); await p.getByRole('button', { name: 'Adicionar loja' }).waitFor()
+  console.log('colunas:', (await p.locator('table.tbl thead th').allInnerTexts()).filter(Boolean).join(' | '))
+  // clicar no nome da loja abre a edição
+  await p.getByRole('button', { name: 'Pingo Doce Telheiras', exact: true }).click()
+  await p.getByRole('dialog').waitFor(); console.log('diálogo:', await p.locator('[role=dialog] h2').first().innerText().catch(() => '?'))
+  await p.getByLabel('Observações').fill('Pedir chave do armazém ao chefe de loja'); await p.getByRole('button', { name: 'Guardar' }).click()
+  await p.waitForTimeout(800)
+  console.log('obs na grelha:', await p.locator('tr:has-text("Pingo Doce Telheiras") td').last().evaluate((td) => td.previousElementSibling.innerText))
+  console.log('mecânica:', (await p.locator('tr:has-text("Pingo Doce Telheiras") td').nth(1).innerText()).replace(/\n/g, ' / '))
+  await p.screenshot({ path: '/tmp/shots/linhas-pro.png' })
+  // afetação com pesquisa
+  await p.getByRole('button', { name: /Por atribuir/ }).first().click(); await p.getByRole('dialog').waitFor()
+  const cb = p.getByRole('combobox'); await cb.fill('a'); await p.waitForTimeout(300)
+  console.log('1 letra:', await p.locator('[role=listbox]').innerText())
+  await cb.fill('ma'); await p.waitForSelector('[role=option]')
+  console.log('opções "ma":', (await p.locator('[role=option]').allInnerTexts()).map((t) => t.replace(/\n/g, ' / ')).join(' || '))
+  await p.screenshot({ path: '/tmp/shots/afetar-picker.png' })
+  await p.locator('[role=option]').first().click(); await p.getByRole('button', { name: 'Guardar' }).click(); await p.waitForTimeout(800)
+  console.log('linha Benfica:', (await p.locator('tr:has-text("Pingo Doce Benfica")').innerText()).replace(/\s+/g, ' '))
+  console.log(erros.length ? 'ERROS ' + erros.join('\n') : 'sem erros'); await b.close()
+})()

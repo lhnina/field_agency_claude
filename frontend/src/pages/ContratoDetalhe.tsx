@@ -2,11 +2,12 @@ import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { LojaPicker } from '../components/LojaPicker'
+import { ColaboradorPicker } from '../components/ColaboradorPicker'
 import { AreaBadge, Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, useToast } from '../components/ui'
 import { api } from '../lib/api'
 import { ESTADO_CONTRATO, dataCurta, eur, horas, iso, num } from '../lib/format'
 import { DIAS } from '../lib/types'
-import type { Colaborador, Contrato, Linha } from '../lib/types'
+import type { Contrato, Linha } from '../lib/types'
 import { NovoContrato } from './Contratos'
 
 const DIA_LABEL = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
@@ -81,15 +82,24 @@ export default function ContratoDetalhe() {
           <div className="overflow-x-auto">
             <table className="tbl">
               <thead><tr>
-                <th>Loja</th>{DIA_LABEL.map((d) => <th key={d} className="!text-center !px-1 w-10">{d}</th>)}
-                <th className="text-right">Total/sem</th><th className="text-right">Preço/h</th><th className="text-right">Valor mensal</th><th>Colaborador afeto</th><th>Vigência</th><th />
+                <th>Loja</th>{c.tipo === 'PRO' && <th>Mecânica</th>}{DIA_LABEL.map((d) => <th key={d} className="!text-center !px-1 w-10">{d}</th>)}
+                <th className="text-right">Total/sem</th><th className="text-right">Preço/h</th><th className="text-right">Valor mensal</th><th>Colaborador afeto</th><th>Vigência</th><th>Observações</th><th />
               </tr></thead>
               <tbody>
                 {c.linhas.map((ln, i) => {
                   const inativa = ln.fim !== null && ln.fim < iso(new Date())
                   return (
                     <tr key={ln.id} className={inativa ? 'opacity-60' : ''}>
-                      <td><div className="font-medium">{ln.loja_nome}</div><div className="text-xs text-ink-60">{[ln.loja_insignia, ln.loja_zona, ln.mecanica, ln.hora_inicio && `início ${ln.hora_inicio}`].filter(Boolean).join(' · ')}</div></td>
+                      <td>
+                        <button type="button" onClick={() => setLinhaEdit(ln)} className="font-medium text-left hover:underline hover:text-petrol-600">{ln.loja_nome}</button>
+                        <div className="text-xs text-ink-60">{[ln.loja_insignia, ln.loja_zona].filter(Boolean).join(' · ')}</div>
+                      </td>
+                      {c.tipo === 'PRO' && (
+                        <td className="whitespace-nowrap">
+                          <div>{ln.mecanica ?? <span className="text-ink-60">—</span>}</div>
+                          <div className="text-xs text-ink-60 num">{ln.hora_inicio ? `início ${ln.hora_inicio.slice(0, 5)}` : 'sem hora de início'}</div>
+                        </td>
+                      )}
                       {DIAS.map((d) => { const v = Number(ln[`h_${d}`]); return <td key={d} className={`!text-center !px-1 num ${v ? '' : 'text-[#B6BDB8]'}`}>{v ? num(v) : '–'}</td> })}
                       <td className="text-right num font-medium">{horas(ln.horas_semana)}</td>
                       <td className="text-right num">{eur(ln.preco_hora)}</td>
@@ -103,6 +113,7 @@ export default function ContratoDetalhe() {
                         ) : <Button size="sm" variant="secondary" onClick={() => setAfetar(ln)} className="!text-err-fg">Por atribuir · Afetar</Button>}
                       </td>
                       <td className="text-xs text-ink-60 num">{dataCurta(ln.inicio)}<br />{ln.fim ? dataCurta(ln.fim) : 'sem termo'}</td>
+                      <td className="text-xs text-ink-60 max-w-[200px]"><div className="line-clamp-2" title={ln.observacoes ?? undefined}>{ln.observacoes || '—'}</div></td>
                       <td className="text-right"><button type="button" aria-label={`Editar ${ln.loja_nome}`} onClick={() => setLinhaEdit(ln)} className="text-ink-60 hover:text-ink p-1"><Icon name="edit" size={16} /></button></td>
                     </tr>
                   )
@@ -177,7 +188,7 @@ function LinhaDialog({ contrato, linha, onClose, onSaved }: { contrato: Contrato
               <option value="">—</option>{['Degustação', 'Amostras', 'Inquérito', 'Promoção', 'Ativação'].map((x) => <option key={x}>{x}</option>)}
             </select>)}</Field>
         </>}
-        <Field label="Observações" className="col-span-2">{(id) => <input id={id} className="inp" value={f.observacoes} onChange={(e) => setF({ ...f, observacoes: e.target.value })} />}</Field>
+        <Field label="Observações" className="col-span-2">{(id) => <textarea id={id} rows={2} className="inp !h-auto py-2 resize-y" placeholder="Notas sobre o serviço nesta loja (acesso, contacto, regras da loja…)" value={f.observacoes} onChange={(e) => setF({ ...f, observacoes: e.target.value })} />}</Field>
       </div>
       {linha && <p className="text-xs text-ink-60 mt-3">Ao guardar, as ocorrências futuras desta loja que ainda não foram executadas são recalculadas.</p>}
       {m.error ? <div className="mt-3"><ErrorBox error={m.error} /></div> : null}
@@ -187,12 +198,11 @@ function LinhaDialog({ contrato, linha, onClose, onSaved }: { contrato: Contrato
 
 function AfetarDialog({ linha, onClose, onSaved }: { linha: Linha; onClose: () => void; onSaved: (c: Contrato) => void }) {
   const toast = useToast()
-  const colabs = useQuery({ queryKey: ['colaboradores'], queryFn: () => api<Colaborador[]>('/colaboradores') })
-  const [cid, setCid] = useState(linha.afetacao_atual ? String(linha.afetacao_atual.colaborador_id) : '')
+  const [colab, setColab] = useState<{ id: number; nome: string } | null>(linha.afetacao_atual ? { id: linha.afetacao_atual.colaborador_id, nome: linha.afetacao_atual.colaborador_nome } : null)
   const [desde, setDesde] = useState(linha.inicio > iso(new Date()) ? linha.inicio : iso(new Date()))
   const [ate, setAte] = useState('')
   const m = useMutation({
-    mutationFn: () => api<Contrato>(`/linhas/${linha.id}/afetacao`, { method: 'POST', body: { colaborador_id: Number(cid), desde, ate: ate || null } }),
+    mutationFn: () => api<Contrato>(`/linhas/${linha.id}/afetacao`, { method: 'POST', body: { colaborador_id: colab!.id, desde, ate: ate || null } }),
     onSuccess: (c) => { toast('Afetação guardada; planeamento atualizado'); onSaved(c) },
   })
   const remover = useMutation({
@@ -204,12 +214,11 @@ function AfetarDialog({ linha, onClose, onSaved }: { linha: Linha; onClose: () =
       footer={<>
         {linha.afetacao_atual && <Button variant="danger" loading={remover.isPending} onClick={() => remover.mutate()} className="mr-auto">Terminar afetação</Button>}
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button variant="primary" loading={m.isPending} disabled={!cid} onClick={() => m.mutate()}>Guardar</Button></>}>
+        <Button variant="primary" loading={m.isPending} disabled={!colab} onClick={() => m.mutate()}>Guardar</Button></>}>
       <div className="grid grid-cols-2 gap-3.5">
         <Field label="Colaborador" className="col-span-2">{(id) => (
-          <select id={id} className="inp" value={cid} onChange={(e) => setCid(e.target.value)}>
-            <option value="">Escolher…</option>{colabs.data?.map((c) => <option key={c.id} value={c.id}>{c.nome} · {c.funcao ?? ''}{c.zona ? ` · ${c.zona.nome}` : ''}</option>)}
-          </select>)}</Field>
+          <ColaboradorPicker id={id} value={colab} zonaPreferida={linha.loja_zona}
+            onChange={(c) => setColab(c ? { id: c.id, nome: c.nome } : null)} />)}</Field>
         <Field label="A partir de">{(id) => <input id={id} type="date" className="inp" value={desde} onChange={(e) => setDesde(e.target.value)} />}</Field>
         <Field label="Até" hint="Vazio = até ao fim do contrato">{(id) => <input id={id} type="date" className="inp" value={ate} onChange={(e) => setAte(e.target.value)} />}</Field>
       </div>
