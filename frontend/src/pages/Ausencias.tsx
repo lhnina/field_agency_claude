@@ -3,9 +3,10 @@ import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, useToast } from '../components/ui'
 import { DataInput } from '../components/DataInput'
+import { ColaboradorPicker } from '../components/ColaboradorPicker'
 import { api } from '../lib/api'
 import { dataCurta, iso } from '../lib/format'
-import type { Ausencia, Colaborador } from '../lib/types'
+import type { Ausencia } from '../lib/types'
 
 const TIPO: Record<string, string> = { ferias: 'Férias', falta: 'Falta', baixa: 'Baixa', indisponivel: 'Indisponibilidade' }
 
@@ -44,10 +45,10 @@ export default function Ausencias() {
 function NovaAusencia({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient()
   const toast = useToast()
-  const colabs = useQuery({ queryKey: ['colaboradores'], queryFn: () => api<Colaborador[]>('/colaboradores') })
-  const [f, setF] = useState({ colaborador_id: '', tipo: 'ferias', inicio: iso(new Date()), fim: iso(new Date()), observacoes: '' })
+  const [colab, setColab] = useState<{ id: number; nome: string } | null>(null)
+  const [f, setF] = useState({ tipo: 'ferias', inicio: iso(new Date()), fim: iso(new Date()), observacoes: '' })
   const m = useMutation({
-    mutationFn: () => api<Ausencia>('/ausencias', { method: 'POST', body: { ...f, colaborador_id: Number(f.colaborador_id), observacoes: f.observacoes || null } }),
+    mutationFn: () => api<Ausencia>('/ausencias', { method: 'POST', body: { ...f, colaborador_id: colab!.id, observacoes: f.observacoes || null } }),
     onSuccess: (a) => {
       qc.invalidateQueries({ queryKey: ['ausencias'] }); qc.invalidateQueries({ queryKey: ['planeamento'] })
       toast(a.por_substituir ? `Ausência registada: ${a.por_substituir} serviços por substituir` : 'Ausência registada', a.por_substituir ? 'warn' : 'ok')
@@ -57,9 +58,9 @@ function NovaAusencia({ onClose }: { onClose: () => void }) {
   const err = f.fim < f.inicio ? 'A data de fim é anterior à data de início' : null
   return (
     <Modal title="Registar ausência" onClose={onClose}
-      footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" loading={m.isPending} disabled={!f.colaborador_id || !!err} onClick={() => m.mutate()}>Registar</Button></>}>
+      footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" loading={m.isPending} disabled={!colab || !!err} onClick={() => m.mutate()}>Registar</Button></>}>
       <div className="grid grid-cols-2 gap-3.5">
-        <Field label="Colaborador" className="col-span-2">{(id) => <select id={id} className="inp" value={f.colaborador_id} onChange={(e) => setF({ ...f, colaborador_id: e.target.value })}><option value="">Escolher…</option>{colabs.data?.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>}</Field>
+        <Field label="Colaborador" className="col-span-2">{(id) => <ColaboradorPicker id={id} value={colab} onChange={(c) => setColab(c ? { id: c.id, nome: c.nome } : null)} />}</Field>
         <Field label="Tipo">{(id) => <select id={id} className="inp" value={f.tipo} onChange={(e) => setF({ ...f, tipo: e.target.value })}>{Object.entries(TIPO).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>}</Field>
         <span />
         <Field label="De">{(id) => <DataInput id={id} value={f.inicio} onChange={(v) => setF({ ...f, inicio: v })} />}</Field>

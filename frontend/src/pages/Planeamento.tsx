@@ -12,6 +12,7 @@ const ALERTA: Record<string, string> = {
   sem_colaborador: 'Sem colaborador',
   colaborador_ausente: 'Colaborador ausente nesta data',
   excede_horas_dia: 'Excede 8 h no dia',
+  documentacao: 'Documentação em falta ou expirada',
 }
 
 export default function Planeamento() {
@@ -111,6 +112,7 @@ export default function Planeamento() {
           <Badge tone={data.resumo.por_atribuir ? 'err' : 'ok'} dot>{data.resumo.por_atribuir} por atribuir</Badge>
           <Badge tone={data.resumo.ausencias ? 'warn' : 'neu'} dot>{data.resumo.ausencias} {data.resumo.ausencias === 1 ? "ausência" : "ausências"}</Badge>
           <Badge tone={data.resumo.conflitos ? 'err' : 'neu'} dot>{data.resumo.conflitos} conflitos</Badge>
+          {!!data.resumo.documentacao && <Link to="/documentacao" title="Turnos com documentação obrigatória em falta ou expirada"><Badge tone="warn" dot>{data.resumo.documentacao} com documentação pendente</Badge></Link>}
         </>}
       </div>
 
@@ -177,7 +179,7 @@ export default function Planeamento() {
             <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-60">
               Turno selecionado <AreaBadge tipo={selecionada.tipo} />
               {selecionada.substituicao && <Badge tone="info">Substituição</Badge>}
-              {selecionada.alertas.map((a) => <Badge key={a} tone="err" dot>{ALERTA[a] ?? a}</Badge>)}
+              {selecionada.alertas.map((a) => <Badge key={a} tone={a === 'documentacao' ? 'warn' : 'err'} dot>{ALERTA[a] ?? a}</Badge>)}
             </div>
             <div className="font-semibold text-[14.5px] mt-0.5">
               {diaSemana(selecionada.data)} {diaMes(selecionada.data)}{selecionada.hora_inicio ? ` · ${selecionada.hora_inicio}` : ''} · {horas(selecionada.horas)} · {selecionada.loja}
@@ -188,6 +190,10 @@ export default function Planeamento() {
               {selecionada.substituicao && ` (substitui ${nomeColab(selecionada.colaborador_previsto_id)})`}
               {selecionada.reagendada_feriado && ` · reagendado de ${diaMes(selecionada.data_original)} (feriado)`}
             </div>
+            {!!selecionada.documentacao?.length && (
+              <div className="text-[12.5px] text-warn-fg flex gap-1.5 mt-1"><Icon name="shield" size={14} className="mt-0.5 flex-none" />
+                <span>{selecionada.documentacao.join(' · ')} · <Link to={`/colaboradores?id=${selecionada.colaborador_id}`} className="underline">ver documentos</Link></span></div>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             <Button icon="swap" onClick={() => setSubst(selecionada)}>{selecionada.colaborador_id ? 'Substituir' : 'Atribuir'}</Button>

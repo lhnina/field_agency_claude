@@ -265,6 +265,8 @@ def candidatos(db: Session, o: Ocorrencia, limite: int = 8) -> list[dict]:
     seg = o.data - timedelta(days=o.data.weekday())
     horas = _horas_por_colaborador(db, o.tenant_id, seg, seg + timedelta(days=6))
     ausentes = _ausentes(db, o.tenant_id, o.data, o.data)
+    from app.services import documentos as dc  # import local: evita ciclo
+    ctx_doc = dc.contexto(db, o.tenant_id)
     res = []
     for c in db.scalars(select(Colaborador).where(Colaborador.tenant_id == o.tenant_id, Colaborador.ativo.is_(True))).all():
         if c.id == o.colaborador_id:
@@ -287,6 +289,8 @@ def candidatos(db: Session, o: Ocorrencia, limite: int = 8) -> list[dict]:
                 bloqueios.append(f"Excederia {settings.limite_horas_dia:g} h no dia ({dia + o.horas_planeadas} h)")
             if semana + o.horas_planeadas > Decimal(str(settings.limite_horas_semana)):
                 bloqueios.append(f"Excederia {settings.limite_horas_semana:g} h na semana")
+        for falta in ctx_doc.falhas(c, o.linha.contrato.cliente_id, loja.insignia_id, o.data):
+            bloqueios.append(f"Documentação: {falta}")
         pontos += 1 if semana < 20 else 0
         res.append({"colaborador_id": c.id, "nome": c.nome, "vinculo": c.vinculo.value, "horas_dia": float(dia),
                     "horas_semana": float(semana), "pontos": pontos - 10 * len(bloqueios), "motivos": motivos,
@@ -355,6 +359,9 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
         ids |= equipa  # só o supervisor filtrado: mostra a equipa toda, para poder afetar
     colabs = {c.id: c for c in db.scalars(select(Colaborador).where(Colaborador.id.in_(ids))).all()} if ids else {}
     ausencias = _ausentes(db, user.tenant_id, segunda, dom)
+    from app.services import documentos as dc  # import local: evita ciclo
+    ctx_doc = dc.contexto(db, user.tenant_id, list(colabs))
+    falhas_doc: dict[int, set[str]] = {}
 
     horas: dict[tuple[int, date], Decimal] = {}
     for o in ocorrencias:
@@ -377,6 +384,10 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
             if c and c.vinculo != TipoVinculo.recibos_verdes and horas.get((cid, o.data), 0) > Decimal(str(settings.limite_horas_dia)):
                 alertas.append("excede_horas_dia")
         ln = o.linha
+        docs = ctx_doc.falhas(colabs[cid], ln.contrato.cliente_id, ln.loja.insignia_id, o.data) if cid in colabs else []
+        if docs:  # só aviso: não impede a afetação
+            alertas.append("documentacao")
+            falhas_doc.setdefault(cid, set()).update(docs)
         return {
             "id": o.id, "data": o.data.isoformat(), "data_original": o.data_original.isoformat(),
             "reagendada_feriado": o.reagendada_feriado, "hora_inicio": o.hora_inicio,
@@ -385,9 +396,10 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
             "substituicao": o.colaborador_efetivo_id is not None, "motivo": o.motivo_alteracao,
             "linha_id": ln.id, "contrato_id": ln.contrato_id, "contrato_numero": ln.contrato.numero,
             "tipo": ln.contrato.tipo.value, "cliente": ln.contrato.cliente.nome, "loja": ln.loja.nome,
-            "loja_id": ln.loja_id, "mecanica": ln.mecanica, "alertas": alertas,
+            "loja_id": ln.loja_id, "mecanica": ln.mecanica, "alertas": alertas, "documentacao": docs,
         }
 
+    oc = [oc_json(o) for o in ocorrencias]
     linhas_colab = []
     for cid, c in sorted(colabs.items(), key=lambda kv: kv[1].nome):
         tot = sum((v for (k, _), v in horas.items() if k == cid), Decimal("0"))
@@ -404,6 +416,8 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
             if c.vinculo == TipoVinculo.muito_curta_duracao:
                 from app.services.fecho import indicadores_colaborador  # import local: evita ciclo
                 alertas += [a["texto"] for a in indicadores_colaborador(db, c, date.today())["alertas"]]
+        if falhas_doc.get(cid):
+            alertas.append("Documentação: " + ", ".join(sorted(falhas_doc[cid])))
         aus = [{"tipo": a.tipo.value, "inicio": a.inicio.isoformat(), "fim": a.fim.isoformat()} for a in ausencias.get(cid, [])]
         linhas_colab.append({
             "id": cid, "nome": c.nome, "numero": c.numero, "vinculo": c.vinculo.value, "funcao": c.funcao,
@@ -411,7 +425,6 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
             "alertas": alertas, "ausencias": aus, "disponibilidade": c.disponibilidade,
         })
 
-    oc = [oc_json(o) for o in ocorrencias]
     return {
         "inicio": segunda.isoformat(), "fim": dom.isoformat(),
         "dias": [(segunda + timedelta(days=i)).isoformat() for i in range(7)],
@@ -423,6 +436,7 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
             "por_atribuir": sum(1 for o in oc if o["colaborador_id"] is None),
             "conflitos": sum(1 for o in oc if {"colaborador_ausente", "excede_horas_dia"} & set(o["alertas"])),
             "ausencias": sum(len(v) for k, v in ausencias.items() if k in colabs),
+            "documentacao": sum(1 for o in oc if "documentacao" in o["alertas"]),
             "horas": float(sum((o.horas_planeadas for o in ocorrencias), Decimal("0"))),
         },
     }

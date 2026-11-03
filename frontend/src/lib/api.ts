@@ -53,3 +53,30 @@ export async function login(email: string, password: string) {
   session.set(body.access_token, body.user)
   return body.user as SessionUser
 }
+
+/** Envio de formulário com ficheiro (multipart). */
+export async function apiForm<T>(path: string, method: 'POST' | 'PUT', dados: Record<string, string | Blob | null | undefined>): Promise<T> {
+  const fd = new FormData()
+  Object.entries(dados).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') fd.append(k, v) })
+  const headers: Record<string, string> = {}
+  const t = session.token()
+  if (t) headers.Authorization = `Bearer ${t}`
+  const r = await fetch('/api' + path, { method, headers, body: fd })
+  const body = await r.json().catch(() => null)
+  if (!r.ok) throw new ApiError(r.status, mensagem(body, r.status))
+  return body as T
+}
+
+/** Abre um ficheiro protegido (com sessão) num novo separador. */
+export async function abrirFicheiro(path: string) {
+  const janela = window.open('', '_blank')
+  const headers: Record<string, string> = {}
+  const t = session.token()
+  if (t) headers.Authorization = `Bearer ${t}`
+  const r = await fetch('/api' + path, { headers })
+  if (!r.ok) { janela?.close(); throw new ApiError(r.status, mensagem(await r.json().catch(() => null), r.status)) }
+  const url = URL.createObjectURL(await r.blob())
+  if (janela) janela.location.href = url
+  else window.location.assign(url)
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}

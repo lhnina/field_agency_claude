@@ -19,6 +19,7 @@ import PreFaturacao from './pages/PreFaturacao'
 import Apuramentos from './pages/Apuramentos'
 import Importacao from './pages/Importacao'
 import Configuracao from './pages/Configuracao'
+import Documentacao from './pages/Documentacao'
 import type { ReactNode } from 'react'
 
 const qc = new QueryClient({ defaultOptions: { queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 15_000 } } })
@@ -41,6 +42,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="contratos" element={<Contratos />} />
               <Route path="contratos/:id" element={<ContratoDetalhe />} />
               <Route path="colaboradores" element={<Colaboradores />} />
+              <Route path="documentacao" element={<Documentacao />} />
               <Route path="clientes" element={<ClientesLojas />} />
               <Route path="validacao" element={<Validacao />} />
               <Route path="prefaturacao" element={<PreFaturacao />} />

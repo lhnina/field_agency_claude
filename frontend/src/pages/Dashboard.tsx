@@ -3,13 +3,14 @@ import { useQuery } from '@tanstack/react-query'
 import { AreaBadge, Badge, Bar, Button, Card, CardHeader, Empty, ErrorBox, Icon, Kpi, Loading, PageHeader } from '../components/ui'
 import { api, session } from '../lib/api'
 import { dataCurta, diaMes, diaSemana, eur, horas } from '../lib/format'
-import type { Ocorrencia } from '../lib/types'
+import type { Ocorrencia, ResumoDoc } from '../lib/types'
 
 type Dash = {
   faturacao_mensal_prevista: number; horas_contratadas_mes: number; horas_planeadas_mes: number; contratos_ativos: number
   contratos_a_terminar: { id: number; numero: string; fim: string }[]
   semana: { total: number; por_atribuir: number; conflitos: number; ausencias: number; horas: number }
   por_atribuir: Ocorrencia[]; alertas_colaboradores: { id: number; nome: string; alertas: string[] }[]
+  documentacao?: ResumoDoc
 }
 
 export default function Dashboard() {
@@ -50,10 +51,15 @@ export default function Dashboard() {
         <Card>
           <CardHeader title="Alertas operacionais" />
           <ul className="px-[18px] py-2">
+            {d.documentacao && (d.documentacao.expirados + d.documentacao.em_falta > 0) && <Alerta tone="err" icon="shield"
+              titulo={`Documentação: ${d.documentacao.expirados} expirados · ${d.documentacao.em_falta} em falta`}
+              sub={`${d.documentacao.colaboradores_com_problemas} colaboradores · ${d.documentacao.a_expirar} a expirar em breve`} to="/documentacao" />}
+            {d.documentacao && !(d.documentacao.expirados + d.documentacao.em_falta) && d.documentacao.a_expirar > 0 && <Alerta tone="warn" icon="shield"
+              titulo={`${d.documentacao.a_expirar} documentos a expirar`} sub="Renovar antes da validade" to="/documentacao?estado=a_expirar" />}
             {d.semana.ausencias > 0 && <Alerta tone="warn" icon="sun" titulo={`${d.semana.ausencias} ${d.semana.ausencias === 1 ? "ausência" : "ausências"} esta semana`} sub="Ver serviços por substituir" to="/ausencias" />}
             {d.alertas_colaboradores.map((c) => <Alerta key={c.id} tone="err" icon="alert" titulo={c.nome} sub={c.alertas.join(' · ')} to="/planeamento" />)}
             {d.contratos_a_terminar.map((c) => <Alerta key={c.id} tone="neu" icon="file" titulo={`${c.numero} termina`} sub={dataCurta(c.fim)} to={`/contratos/${c.id}`} />)}
-            {!d.semana.ausencias && !d.alertas_colaboradores.length && !d.contratos_a_terminar.length && <li className="py-6 text-center text-ink-60 text-sm">Sem alertas.</li>}
+            {!d.semana.ausencias && !d.alertas_colaboradores.length && !(d.documentacao && d.documentacao.expirados + d.documentacao.em_falta + d.documentacao.a_expirar) && !d.contratos_a_terminar.length && <li className="py-6 text-center text-ink-60 text-sm">Sem alertas.</li>}
           </ul>
         </Card>
       </div>
@@ -61,7 +67,7 @@ export default function Dashboard() {
   )
 }
 
-function Alerta({ tone, icon, titulo, sub, to }: { tone: 'warn' | 'err' | 'neu'; icon: 'sun' | 'alert' | 'file'; titulo: string; sub: string; to: string }) {
+function Alerta({ tone, icon, titulo, sub, to }: { tone: 'warn' | 'err' | 'neu'; icon: 'sun' | 'alert' | 'file' | 'shield'; titulo: string; sub: string; to: string }) {
   return (
     <li className="flex gap-3 items-start py-2.5 border-b border-line-soft last:border-0">
       <Badge tone={tone} className="!w-[30px] !h-[30px] !p-0 justify-center !rounded-lg"><Icon name={icon} size={16} /></Badge>

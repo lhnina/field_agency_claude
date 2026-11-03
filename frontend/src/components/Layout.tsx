@@ -23,7 +23,7 @@ const GRUPOS: { titulo?: string; itens: Item[] }[] = [
   ] },
   { titulo: 'Pessoas', itens: [
     { to: '/colaboradores', icon: 'users', label: 'Colaboradores' },
-    { icon: 'shield', label: 'Documentação' },
+    { to: '/documentacao', icon: 'shield', label: 'Documentação' },
   ] },
   { titulo: 'Financeiro', itens: [
     { icon: 'trend', label: 'Rentabilidade' },

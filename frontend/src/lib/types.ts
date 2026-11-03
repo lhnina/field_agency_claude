@@ -48,7 +48,7 @@ export type Ocorrencia = {
   id: number; data: string; data_original: string; reagendada_feriado: boolean; hora_inicio: string | null; horas: number
   estado: string; colaborador_id: number | null; colaborador_previsto_id: number | null; substituicao: boolean
   motivo: string | null; linha_id: number; contrato_id: number; contrato_numero: string; tipo: TipoContrato
-  cliente: string; loja: string; loja_id: number; mecanica: string | null; alertas: string[]
+  cliente: string; loja: string; loja_id: number; mecanica: string | null; alertas: string[]; documentacao?: string[]
 }
 export type LinhaColaborador = {
   id: number; nome: string; numero: string; vinculo: Vinculo; funcao: string | null; horas_semana: number
@@ -56,7 +56,7 @@ export type LinhaColaborador = {
 }
 export type Planeamento = {
   inicio: string; fim: string; dias: string[]; colaboradores: LinhaColaborador[]; ocorrencias: Ocorrencia[]
-  por_atribuir: Ocorrencia[]; resumo: { total: number; por_atribuir: number; conflitos: number; ausencias: number; horas: number }
+  por_atribuir: Ocorrencia[]; resumo: { total: number; por_atribuir: number; conflitos: number; ausencias: number; horas: number; documentacao?: number }
 }
 export type Candidato = {
   colaborador_id: number; nome: string; vinculo: Vinculo; horas_dia: number; horas_semana: number; pontos: number
@@ -66,3 +66,21 @@ export type Ausencia = {
   id: number; colaborador_id: number; colaborador_nome: string; tipo: string; inicio: string; fim: string
   observacoes: string | null; ocorrencias_afetadas: number; por_substituir: number
 }
+
+// ---------------------------------------------------------------- documentação
+export type EstadoDocumento = 'valido' | 'a_expirar' | 'expirado' | 'em_falta'
+export type TipoDocumento = { id: number; nome: string; tem_validade: boolean; dias_aviso: number; ativo: boolean; requisitos: number; documentos: number }
+export type Requisito = {
+  id: number; tipo_documento_id: number; tipo: string; funcao: string | null; cliente_id: number | null; cliente: string | null
+  insignia_id: number | null; insignia: string | null; aplica_se: string; ativo: boolean
+}
+export type DocumentoReg = {
+  id: number; colaborador_id: number; tipo_documento_id: number; numero: string | null; emissao: string | null; validade: string | null
+  observacoes: string | null; atual: boolean; ficheiro_nome: string | null; ficheiro_tamanho: number | null; registado_em: string | null; tipo?: string
+}
+export type SituacaoDoc = {
+  colaborador_id: number; colaborador: string; numero_colaborador: string; funcao: string | null; zona: string | null
+  tipo_documento_id: number; tipo: string; tem_validade: boolean; obrigatorio: boolean; motivo: string | null
+  estado: EstadoDocumento; documento: DocumentoReg | null
+}
+export type ResumoDoc = { expirados: number; em_falta: number; a_expirar: number; validos: number; colaboradores_com_problemas: number }

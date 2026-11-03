@@ -10,7 +10,8 @@ from datetime import date, datetime
 from decimal import Decimal
 
 from sqlalchemy import (
-    Boolean, CheckConstraint, Date, DateTime, Enum, func, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint,
+    Boolean, CheckConstraint, Date, DateTime, Enum, func, ForeignKey, Integer, LargeBinary, Numeric, String, Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -307,6 +308,53 @@ class Ausencia(TenantMixin, Base):
     aprovada: Mapped[bool] = mapped_column(Boolean, default=True)
     observacoes: Mapped[str | None] = mapped_column(String(200))
     colaborador: Mapped[Colaborador] = relationship()
+
+
+# ---------------------------------------------------------------- documentação
+class TipoDocumento(TenantMixin, Base):
+    """Tipo de documento controlado pela agência (cartão de cidadão, formação HACCP, registo criminal…)."""
+    __tablename__ = "tipos_documento"
+    id: Mapped[int] = IdCol()
+    nome: Mapped[str] = mapped_column(String(120))
+    tem_validade: Mapped[bool] = mapped_column(Boolean, default=True)
+    dias_aviso: Mapped[int] = mapped_column(Integer, default=30)  # avisa X dias antes de expirar
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
+class RequisitoDocumental(TenantMixin, Base):
+    """Documento obrigatório. Campos vazios = qualquer: sem função, cliente nem insígnia aplica-se a todos.
+    Com cliente/insígnia aplica-se a quem presta serviço nesse cliente/cadeia."""
+    __tablename__ = "requisitos_documentais"
+    id: Mapped[int] = IdCol()
+    tipo_documento_id: Mapped[int] = mapped_column(ForeignKey("tipos_documento.id"), index=True)
+    funcao: Mapped[str | None] = mapped_column(String(80))
+    cliente_id: Mapped[int | None] = mapped_column(ForeignKey("clientes.id"))
+    insignia_id: Mapped[int | None] = mapped_column(ForeignKey("insignias.id"))
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    tipo: Mapped[TipoDocumento] = relationship()
+    cliente: Mapped["Cliente | None"] = relationship()
+    insignia: Mapped["Insignia | None"] = relationship()
+
+
+class DocumentoColaborador(TenantMixin, Base):
+    """Documento entregue por um colaborador. Ao renovar, o anterior fica no histórico (atual=False)."""
+    __tablename__ = "documentos_colaborador"
+    id: Mapped[int] = IdCol()
+    colaborador_id: Mapped[int] = mapped_column(ForeignKey("colaboradores.id"), index=True)
+    tipo_documento_id: Mapped[int] = mapped_column(ForeignKey("tipos_documento.id"), index=True)
+    numero: Mapped[str | None] = mapped_column(String(80))
+    emissao: Mapped[date | None] = mapped_column(Date)
+    validade: Mapped[date | None] = mapped_column(Date)
+    observacoes: Mapped[str | None] = mapped_column(String(250))
+    atual: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    ficheiro_nome: Mapped[str | None] = mapped_column(String(200))
+    ficheiro_tipo: Mapped[str | None] = mapped_column(String(100))
+    ficheiro_tamanho: Mapped[int | None] = mapped_column(Integer)
+    # Conteúdo do anexo: carregado só quando é descarregado (deferred)
+    ficheiro: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    criado_por_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    colaborador: Mapped[Colaborador] = relationship()
+    tipo: Mapped[TipoDocumento] = relationship()
 
 
 class TipoPeriodo(str, enum.Enum):

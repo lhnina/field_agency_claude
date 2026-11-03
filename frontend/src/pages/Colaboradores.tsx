@@ -1,12 +1,13 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Avatar, Badge, Bar, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, useToast } from '../components/ui'
 import { DataInput } from '../components/DataInput'
-import { api } from '../lib/api'
+import { abrirFicheiro, api } from '../lib/api'
+import { DocumentoDialog, ESTADO_DOC, podeRegistarDocs } from './Documentacao'
 import { BotaoEstado, MostrarInativos } from '../components/Estado'
 import { AREA, VINCULO, dataCurta, eur, horas } from '../lib/format'
-import type { Colaborador, IdNome, Vinculo } from '../lib/types'
+import type { Colaborador, DocumentoReg, IdNome, ResumoDoc, SituacaoDoc, Vinculo } from '../lib/types'
 
 const DL = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D']
 const SEGMENTOS: { value: string; label: string }[] = [
@@ -21,7 +22,8 @@ export default function Colaboradores() {
   const [zona, setZona] = useState('')
   const nav = useNavigate()
   const zonas = useQuery({ queryKey: ['zonas'], queryFn: () => api<IdNome[]>('/zonas') })
-  const [sel, setSel] = useState<number | null>(null)
+  const [sp] = useSearchParams()
+  const [sel, setSel] = useState<number | null>(sp.get('id') ? Number(sp.get('id')) : null)
   const [edit, setEdit] = useState<Colaborador | 'novo' | null>(null)
   const lista = useQuery({ queryKey: ['colaboradores', vinculo, q, inativos, zona], queryFn: () => api<Colaborador[]>('/colaboradores', { params: { vinculo, q, inativos, zona_id: zona } }) })
   const sups = useQuery({ queryKey: ['supervisores'], queryFn: () => api<IdNome[]>('/utilizadores/supervisores') })
@@ -103,6 +105,7 @@ export default function Colaboradores() {
             </dl>
             <Afetacoes id={atual.id} total={Number(atual.horas_afetadas)} prestador={atual.vinculo === 'recibos_verdes'}
               onPlaneamento={() => nav(`/planeamento?colaborador=${atual.id}${atual.zona_id ? `&zona=${atual.zona_id}` : ''}`)} />
+            <DocumentosColab id={atual.id} nome={atual.nome} />
             <div className="px-[18px] py-3.5 border-t border-line-soft">
               <div className="text-[13px] font-semibold mb-2">Disponibilidade semanal</div>
               <Disp d={atual.disponibilidade} big />
@@ -149,6 +152,44 @@ function Afetacoes({ id, total, prestador, onPlaneamento }: { id: number; total:
         ))}
         {q.data?.length === 0 && <li className="text-[12.5px] text-ink-60">Sem lojas afetas. Use "Ver no planeamento" para lhe atribuir serviços por atribuir.</li>}
       </ul>
+    </div>
+  )
+}
+
+function DocumentosColab({ id, nome }: { id: number; nome: string }) {
+  const q = useQuery({ queryKey: ['documentos-colaborador', id], queryFn: () => api<{ linhas: SituacaoDoc[]; resumo: ResumoDoc; historico: DocumentoReg[] }>(`/colaboradores/${id}/documentos`) })
+  const [dlg, setDlg] = useState<{ linha?: SituacaoDoc; modo: 'novo' | 'corrigir' } | null>(null)
+  const toast = useToast()
+  const r = q.data?.resumo
+  const pend = r ? r.expirados + r.em_falta : 0
+  return (
+    <div className="px-[18px] py-3.5 border-t border-line-soft">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="text-[13px] font-semibold">Documentação</div>
+        {r && (pend ? <Badge tone="err" dot>{pend} pendente{pend > 1 ? 's' : ''}</Badge> : r.a_expirar ? <Badge tone="warn" dot>{r.a_expirar} a expirar</Badge> : <Badge tone="ok" dot>Em dia</Badge>)}
+        <span className="flex-1" />
+        {podeRegistarDocs() && <Button size="sm" icon="plus" onClick={() => setDlg({ modo: 'novo' })}>Documento</Button>}
+      </div>
+      <ul className="flex flex-col divide-y divide-line-soft">
+        {q.data?.linhas.map((l) => {
+          const d = l.documento
+          return (
+            <li key={l.tipo_documento_id} className="py-1.5 flex items-center gap-2 text-[13px]">
+              <div className="min-w-0 flex-1">
+                <div className="font-medium truncate">{l.tipo}</div>
+                <div className="text-xs text-ink-60 truncate">{d ? (l.tem_validade ? `Válido até ${dataCurta(d.validade)}` : 'Sem validade') : `Obrigatório: ${l.motivo}`}</div>
+              </div>
+              {d?.ficheiro_nome && <button type="button" aria-label={`Abrir anexo de ${l.tipo}`} title={d.ficheiro_nome} className="p-1 text-petrol-600 hover:bg-bg rounded"
+                onClick={() => abrirFicheiro(`/documentos/${d.id}/ficheiro`).catch((x) => toast(x instanceof Error ? x.message : 'Erro', 'err'))}><Icon name="file" size={15} /></button>}
+              <Badge tone={l.estado === 'em_falta' && !l.obrigatorio ? 'neu' : ESTADO_DOC[l.estado].tone} dot>{ESTADO_DOC[l.estado].label}</Badge>
+              {podeRegistarDocs() && <Button size="sm" variant="ghost" onClick={() => setDlg({ linha: l, modo: 'novo' })}>{d ? 'Renovar' : 'Registar'}</Button>}
+            </li>
+          )
+        })}
+        {q.data?.linhas.length === 0 && <li className="text-[12.5px] text-ink-60 py-1">Sem documentos obrigatórios nem entregues.</li>}
+      </ul>
+      {!!q.data?.historico.length && <div className="text-xs text-ink-60 mt-1.5">{q.data.historico.length} documento{q.data.historico.length > 1 ? 's' : ''} anterior{q.data.historico.length > 1 ? 'es' : ''} no histórico · <Link to="/documentacao" className="text-petrol-600 hover:underline">Ver documentação</Link></div>}
+      {dlg && <DocumentoDialog linha={dlg.linha} modo={dlg.modo} colaborador={{ id, nome }} onClose={() => setDlg(null)} />}
     </div>
   )
 }

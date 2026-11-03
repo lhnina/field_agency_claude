@@ -5,6 +5,7 @@ Utilizadores: marta@promovida.pt (direção), hugo@promovida.pt (gestor),
 rui@promovida.pt e sara@promovida.pt (supervisores), admin@promovida.pt.
 Palavra-passe de todos: demo1234
 """
+import zlib
 from datetime import date, timedelta
 from decimal import Decimal as D
 
@@ -12,8 +13,8 @@ from sqlalchemy import select, text
 
 from app.db import Base, SessionLocal, engine
 from app.models import (
-    Ausencia, Cliente, Colaborador, Contrato, EstadoContrato, Feriado, Insignia, LinhaContrato, Loja, Marca, Perfil,
-    Tenant, TipoAusencia, TipoContrato, TipoVinculo, User, Zona,
+    Ausencia, Cliente, Colaborador, Contrato, DocumentoColaborador, EstadoContrato, Feriado, Insignia, LinhaContrato, Loja,
+    Marca, Perfil, RequisitoDocumental, Tenant, TipoAusencia, TipoContrato, TipoDocumento, TipoVinculo, User, Zona,
 )
 from app.security import hash_password
 from app.services import operacao as op
@@ -184,9 +185,66 @@ def run(reset: bool = True) -> None:
     for i, o in enumerate(recentes):
         if i % 7 == 2:
             fecho.registar_execucao(db, users["rui"], o, max(o.horas_planeadas - D("1"), D("0")), "Saiu mais cedo (loja sem stock)", hoje)
+    _documentacao(db, T, cols, clientes, ins, users["hugo"], hoje)
     db.commit()
     db.close()
     print("Dados de demonstração criados. Utilizadores: marta|hugo|joana|tomas|rui|sara|admin@promovida.pt / demo1234")
+
+
+def _pdf(titulo: str) -> bytes:
+    """PDF mínimo de uma página, só para demonstrar os anexos."""
+    txt = titulo.encode("latin-1", "replace")
+    stream = b"BT /F1 18 Tf 72 720 Td (" + txt + b") Tj ET"
+    objs = [b"<< /Type /Catalog /Pages 2 0 R >>", b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>",
+            b"<< /Length " + str(len(stream)).encode() + b" >>\nstream\n" + stream + b"\nendstream",
+            b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"]
+    out, offs = b"%PDF-1.4\n", []
+    for i, o in enumerate(objs, 1):
+        offs.append(len(out))
+        out += f"{i} 0 obj\n".encode() + o + b"\nendobj\n"
+    xref = len(out)
+    out += f"xref\n0 {len(objs) + 1}\n0000000000 65535 f \n".encode()
+    out += b"".join(f"{o:010d} 00000 n \n".encode() for o in offs)
+    out += f"trailer\n<< /Size {len(objs) + 1} /Root 1 0 R >>\nstartxref\n{xref}\n%%EOF".encode()
+    return out
+
+
+def _documentacao(db, T, cols, clientes, ins, autor, hoje) -> None:
+    """Tipos, requisitos e documentos de demonstração, com alguns expirados, a expirar e em falta."""
+    tipos = {}
+    for nome, val, aviso in [("Cartão de Cidadão", True, 60), ("Formação HACCP", True, 30), ("Registo criminal", True, 30),
+                             ("Seguro de acidentes pessoais", True, 30), ("Declaração de início de atividade", False, 0)]:
+        tipos[nome] = TipoDocumento(tenant_id=T, nome=nome, tem_validade=val, dias_aviso=aviso)
+    db.add_all(tipos.values())
+    db.flush()
+    for tipo, kw in [("Cartão de Cidadão", {}), ("Formação HACCP", {"funcao": "Promotora"}), ("Formação HACCP", {"funcao": "Promotor"}),
+                     ("Formação HACCP", {"cliente_id": clientes["Nata Doce Gelados"].id}),
+                     ("Registo criminal", {"insignia_id": ins["Continente"].id}),
+                     ("Seguro de acidentes pessoais", {"cliente_id": clientes["Atlântico Conservas"].id})]:
+        db.add(RequisitoDocumental(tenant_id=T, tipo_documento_id=tipos[tipo].id, **kw))
+    d = lambda n: hoje + timedelta(days=n)  # noqa: E731
+    docs = [  # (colaborador, tipo, validade, com anexo)
+        ("Inês Carvalho", "Cartão de Cidadão", d(1400), True), ("Inês Carvalho", "Registo criminal", d(200), True),
+        ("Pedro Almeida", "Cartão de Cidadão", d(900), True), ("Pedro Almeida", "Seguro de acidentes pessoais", d(20), False),
+        ("Sofia Martins", "Cartão de Cidadão", d(2000), True), ("Sofia Martins", "Formação HACCP", d(300), True),
+        ("Carla Sousa", "Cartão de Cidadão", d(45), False), ("Carla Sousa", "Registo criminal", d(-12), True),
+        ("João Ferreira", "Cartão de Cidadão", d(700), False), ("João Ferreira", "Formação HACCP", d(-40), True),
+        ("João Ferreira", "Declaração de início de atividade", None, True),
+        ("Ana Lopes", "Cartão de Cidadão", d(1100), True), ("Beatriz Nunes", "Cartão de Cidadão", d(-5), False),
+        ("Marco Dias", "Cartão de Cidadão", d(25), True), ("Marco Dias", "Seguro de acidentes pessoais", d(150), True),
+        ("Rita Gonçalves", "Cartão de Cidadão", d(500), True), ("Rita Gonçalves", "Registo criminal", d(10), False),
+    ]  # o Tiago Moreira não entregou nada
+    for nome, tipo, val, anexo in docs:
+        doc = DocumentoColaborador(tenant_id=T, colaborador_id=cols[nome].id, tipo_documento_id=tipos[tipo].id,
+                                   numero=f"{zlib.crc32(nome.encode()) % 10**8:08d}" if tipo == "Cartão de Cidadão" else None,
+                                   emissao=(val - timedelta(days=365 * 5)) if val else d(-400), validade=val, criado_por_id=autor.id)
+        if anexo:
+            doc.ficheiro = _pdf(f"{tipo} - {nome}")
+            doc.ficheiro_nome = f"{tipo} - {nome}.pdf"
+            doc.ficheiro_tipo, doc.ficheiro_tamanho = "application/pdf", len(doc.ficheiro)
+        db.add(doc)
+    db.flush()
 
 
 if __name__ == "__main__":

@@ -92,6 +92,10 @@ def dashboard(user: User = Depends(requer("planeamento.ler")), db: Session = Dep
             Contrato, LinhaContrato.contrato_id == Contrato.id).where(Contrato.cliente_id.in_(permitidos))
     planeadas = db.scalar(sp)
     a_terminar = [c for c in contratos if c.fim and hoje <= c.fim <= hoje + timedelta(days=30)]
+    from app.api.documentos import _colabs_ambito
+    from app.services import documentos as dc
+    colabs = _colabs_ambito(db, user)
+    doc = dc.resumo(dc.situacao(db, dc.contexto(db, user.tenant_id, [c.id for c in colabs]), colabs, hoje))
     return {
         "faturacao_mensal_prevista": float(valor),
         "horas_contratadas_mes": float(horas_mes),
@@ -99,6 +103,7 @@ def dashboard(user: User = Depends(requer("planeamento.ler")), db: Session = Dep
         "contratos_ativos": len(contratos),
         "contratos_a_terminar": [{"id": c.id, "numero": c.numero, "fim": c.fim.isoformat()} for c in a_terminar],
         "semana": sem["resumo"],
+        "documentacao": doc,
         "por_atribuir": sem["por_atribuir"][:8],
         "alertas_colaboradores": [{"id": c["id"], "nome": c["nome"], "alertas": c["alertas"]}
                                   for c in sem["colaboradores"] if c["alertas"]],

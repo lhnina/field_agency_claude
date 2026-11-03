@@ -45,6 +45,9 @@ PERMISSOES: dict[str, set[Perfil]] = {
     "dados_mestre.editar": {Perfil.administrador, Perfil.gestor},
     "colaboradores.ler": {Perfil.administrador, Perfil.direcao, Perfil.gestor, Perfil.supervisor, Perfil.rh},
     "colaboradores.editar": {Perfil.administrador, Perfil.gestor, Perfil.rh},
+    # Documentação: tipos e requisitos (configuração) e registo dos documentos entregues
+    "documentos.configurar": {Perfil.administrador, Perfil.gestor, Perfil.rh},
+    "documentos.editar": {Perfil.administrador, Perfil.gestor, Perfil.rh, Perfil.supervisor},
     "contratos.ler": {Perfil.administrador, Perfil.direcao, Perfil.gestor, Perfil.financeiro, Perfil.supervisor},
     "contratos.editar": {Perfil.administrador, Perfil.gestor},
     "planeamento.ler": {Perfil.administrador, Perfil.direcao, Perfil.gestor, Perfil.supervisor},
