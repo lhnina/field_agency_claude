@@ -16,6 +16,7 @@ from app.schemas import (
 )
 from app.security import requer
 from app.services import operacao as op
+from app import ambito
 
 router = APIRouter(tags=["contratos"])
 
@@ -64,6 +65,7 @@ def _carregar(db: Session, cid: int, user: User) -> Contrato:
     ).where(Contrato.id == cid, Contrato.tenant_id == user.tenant_id))
     if not c:
         raise HTTPException(404, "Contrato não encontrado")
+    ambito.verificar(db, user, c)
     return c
 
 
@@ -88,6 +90,12 @@ def listar(tipo: str | None = None, estado: str | None = None, cliente_id: int |
         s = s.where(Contrato.estado == estado)
     if cliente_id:
         s = s.where(Contrato.cliente_id == cliente_id)
+    permitidos = ambito.clientes_permitidos(db, user)
+    if permitidos is not None:
+        s = s.where(Contrato.cliente_id.in_(permitidos))
+    zona = ambito.zona_supervisor(user)
+    if zona is not None:  # contratos com lojas na zona do supervisor
+        s = s.where(Contrato.id.in_(select(LinhaContrato.contrato_id).join(Loja).where(Loja.zona_id == zona)))
     hoje = date.today()
     out = [ContratoResumo(**_resumo(c, hoje)) for c in db.scalars(s.order_by(Contrato.numero.desc())).all()]
     if q:
@@ -185,8 +193,6 @@ def editar_linha(lid: int, body: LinhaIn, user: User = Depends(requer("contratos
 def afetar(lid: int, body: AfetarIn, user: User = Depends(requer("planeamento.editar")), db: Session = Depends(get_db)):
     ln = obter(db, LinhaContrato, lid, user)
     col = obter(db, Colaborador, body.colaborador_id, user)
-    if user.perfil == Perfil.supervisor and col.supervisor_id != user.id:
-        raise HTTPException(403, "Só pode afetar colaboradores da sua equipa")
     try:
         op.afetar(db, user, ln, col, body.desde, body.ate)
     except ValueError as e:

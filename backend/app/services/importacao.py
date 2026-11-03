@@ -117,7 +117,7 @@ MODELOS: dict[str, Modelo] = {
         Coluna("Morada", False, "Rua do Café, 10"), Coluna("Código postal", False, "1000-100"),
         Coluna("Localidade", False, "Lisboa"), Coluna("Telefone", False, "210000000"),
         Coluna("Email", False, "geral@bomgrao.pt"), Coluna("Site", False, "https://bomgrao.pt"),
-        Coluna("Contacto", False, "Paulo Reis"), Coluna("Gestor de conta", False, "Hugo Faria"),
+        Coluna("Contacto", False, "Paulo Reis"), Coluna("Gestor de conta", False, "Joana Pires"),
         Coluna("Observações", False, None),
     ], ["Se o cliente já existir (mesmo nome), é atualizado e as marcas novas são acrescentadas."]),
     "lojas": Modelo("Lojas", [
@@ -291,6 +291,9 @@ def _linha(n: int, chave: str, acao: str, erros: list[str], avisos: list[str] | 
 def _clientes(ctx: Contexto, rows, gravar: bool) -> Resultado:
     res = Resultado()
     existentes = {_norm(c.nome): c for c in ctx.db.scalars(select(Cliente).where(Cliente.tenant_id == ctx.T)).all()}
+    gestores: dict[str, int] = {}
+    for u in ctx.db.scalars(select(User).where(User.tenant_id == ctx.T, User.perfil == Perfil.gestor_conta, User.ativo.is_(True))).all():
+        gestores[_norm(u.nome)] = gestores[_norm(u.email)] = u.id
     vistos: set[str] = set()
     for n, r in rows:
         erros: list[str] = []
@@ -308,6 +311,11 @@ def _clientes(ctx: Contexto, rows, gravar: bool) -> Resultado:
             erros.append(str(e))
             erp = None
         marcas = [m.strip() for m in re.split(r"[;\n]", _txt(r.get("Marcas")) or "") if m.strip()]
+        gestor = None
+        if _txt(r.get("Gestor de conta")):
+            gestor = gestores.get(_norm(_txt(r.get("Gestor de conta"))))
+            if gestor is None:
+                erros.append("Gestor de conta desconhecido (tem de ser um utilizador ativo com o perfil Gestor de conta)")
         c = existentes.get(k)
         res.linhas.append(_linha(n, nome, "atualizar" if c else "criar", erros))
         if gravar and not erros:
@@ -318,11 +326,13 @@ def _clientes(ctx: Contexto, rows, gravar: bool) -> Resultado:
             c.nif = _txt(r.get("NIF")) or c.nif
             for col, attr in [("Morada", "morada"), ("Código postal", "codigo_postal"), ("Localidade", "localidade"),
                               ("Telefone", "telefone"), ("Email", "email"), ("Site", "url"), ("Contacto", "contacto_nome"),
-                              ("Gestor de conta", "gestor_conta"), ("Observações", "observacoes")]:
+                              ("Observações", "observacoes")]:
                 v = _txt(r.get(col))
                 if v is not None:
                     setattr(c, attr, v)
             c.codigo_erp = erp if erp is not None else c.codigo_erp
+            if gestor is not None:
+                c.gestor_conta_id = gestor
             atuais = {_norm(m.nome) for m in c.marcas}
             for m in marcas:
                 if _norm(m) not in atuais:

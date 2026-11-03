@@ -50,13 +50,13 @@ def test_supervisor_nao_edita_contratos(client, mundo):
     assert r.status_code == 403
 
 
-def test_supervisor_nao_afeta_colaborador_de_outra_equipa(client, mundo):
+def test_supervisor_nao_afeta_colaborador_de_outra_zona(client, mundo):
     from tests.conftest import nova_linha
     ln = nova_linha(mundo, [2, 0, 0, 0, 0, 0, 0])
     mundo.db.commit()
     h = token(client, "s1@t.pt")
     r = client.post(f"/api/linhas/{ln.id}/afetacao", headers=h, json={"colaborador_id": mundo.outro.id, "desde": str(date(2026, 11, 2))})
-    assert r.status_code == 403
+    assert r.status_code == 404  # colaborador de outra zona: para o supervisor não existe
 
 
 def test_colaboradores_carga_afetada_e_filtro_zona(client, mundo):

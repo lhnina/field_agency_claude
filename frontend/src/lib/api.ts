@@ -1,7 +1,7 @@
 const TOKEN_KEY = 'fa.token'
 const USER_KEY = 'fa.user'
 
-export type SessionUser = { id: number; nome: string; email: string; perfil: string }
+export type SessionUser = { id: number; nome: string; email: string; perfil: string; zona?: string | null }
 
 export const session = {
   token: () => { try { return localStorage.getItem(TOKEN_KEY) } catch { return null } },

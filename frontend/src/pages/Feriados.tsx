@@ -12,7 +12,7 @@ export default function Feriados() {
   const toast = useToast()
   const [ano, setAno] = useState(new Date().getFullYear())
   const [novo, setNovo] = useState(false)
-  const pode = ['administrador', 'direcao', 'gestor'].includes(session.user()?.perfil ?? '')
+  const pode = ['administrador', 'direcao', 'gestor', 'gestor_conta'].includes(session.user()?.perfil ?? '')
   const q = useQuery({ queryKey: ['feriados', ano], queryFn: () => api<F[]>('/feriados', { params: { ano } }) })
   const apagar = useMutation({
     mutationFn: (id: number) => api(`/feriados/${id}`, { method: 'DELETE' }),

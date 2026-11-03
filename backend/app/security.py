@@ -59,6 +59,12 @@ PERMISSOES: dict[str, set[Perfil]] = {
 }
 
 
+# O gestor de conta tem os mesmos acessos do gestor operacional (o âmbito por cliente está em app/ambito.py).
+for _perfis in PERMISSOES.values():
+    if Perfil.gestor in _perfis:
+        _perfis.add(Perfil.gestor_conta)
+
+
 def requer(permissao: str):
     perfis = PERMISSOES[permissao]
 

@@ -324,18 +324,23 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
         q = q.where(Contrato.cliente_id == f.cliente_id)
     if f.tipo:
         q = q.where(Contrato.tipo == f.tipo)
+    from app.ambito import clientes_permitidos
+    permitidos = clientes_permitidos(db, user)
+    if permitidos is not None:
+        q = q.where(Contrato.cliente_id.in_(permitidos))
     ocorrencias = db.scalars(q.order_by(Ocorrencia.data, Ocorrencia.hora_inicio)).unique().all()
 
-    sup = user.id if user.perfil == Perfil.supervisor else f.supervisor_id
-    equipa: set[int] | None = None
-    if sup:
-        equipa = set(db.scalars(select(Colaborador.id).where(
-            Colaborador.tenant_id == user.tenant_id, Colaborador.ativo.is_(True), Colaborador.supervisor_id == sup)).all())
+    # Âmbito do supervisor (o próprio, ou o escolhido no filtro): a zona que supervisiona.
+    from app.ambito import equipa as equipa_de
+    sup_user = user if user.perfil == Perfil.supervisor else (db.get(User, f.supervisor_id) if f.supervisor_id else None)
+    zona_sup = sup_user.zona_id if sup_user is not None else None
+    sup = zona_sup is not None
+    equipa: set[int] | None = equipa_de(db, sup_user)
 
     def visivel(o: Ocorrencia) -> bool:
         cid = o.colaborador_id
         if cid is None:  # por atribuir: lojas do supervisor e, na vista de colaborador, da zona escolhida
-            if sup and o.linha.loja.supervisor_id != sup:
+            if sup and o.linha.loja.zona_id != zona_sup:
                 return False
             return not (alvo and f.zona_id and o.linha.loja.zona_id != f.zona_id)
         if equipa is not None and cid not in equipa:

@@ -12,9 +12,9 @@ def test_cliente_ficha_completa_e_edicao(client, mundo):
     h = token(client, "g@t.pt")
     body = {"nome": "Doce Lar", "nif": "509000111", "codigo_erp": 1400, "morada": "Rua A, 1", "codigo_postal": "1000-001",
             "localidade": "Lisboa", "telefone": "210000000", "email": "geral@docelar.pt", "url": "https://docelar.pt",
-            "contacto_nome": "Paulo Reis", "gestor_conta": "Hugo Faria", "observacoes": "Cliente novo", "marcas": ["Doce Lar"]}
+            "contacto_nome": "Paulo Reis", "gestor_conta_id": mundo.gc.id, "observacoes": "Cliente novo", "marcas": ["Doce Lar"]}
     r = client.post("/api/clientes", headers=h, json=body)
-    assert r.status_code == 201 and r.json()["gestor_conta"] == "Hugo Faria" and r.json()["ativo"]
+    assert r.status_code == 201 and r.json()["gestor_conta"]["nome"] == "Joana Pires" and r.json()["ativo"]
     cid = r.json()["id"]
     assert client.post("/api/clientes", headers=h, json=body).status_code == 409
     r = client.put(f"/api/clientes/{cid}", headers=h, json={**body, "telefone": "219999999", "marcas": ["Doce Lar", "Lar Kids"]})
@@ -70,7 +70,7 @@ def test_zonas_insignias_e_marcas_inativas(client, mundo):
 
 
 def test_importacao_aceita_cabecalho_antigo_codigo_phc(mundo):
-    conteudo = xlsx(["Nome", "Código PHC", "Gestor de conta"], [["Novo Cliente", 1500, "Hugo"]])
+    conteudo = xlsx(["Nome", "Código PHC", "Gestor de conta"], [["Novo Cliente", 1500, "joana pires"]])
     imp.importar(mundo.db, mundo.gestor, "clientes", conteudo, True)
     c = mundo.db.query(Cliente).filter_by(nome="Novo Cliente").one()
-    assert c.codigo_erp == 1500 and c.gestor_conta == "Hugo"
+    assert c.codigo_erp == 1500 and c.gestor_conta_id == mundo.gc.id

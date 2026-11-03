@@ -33,7 +33,7 @@ const GRUPOS: { titulo?: string; itens: Item[] }[] = [
 ]
 
 const PERFIL: Record<string, string> = {
-  administrador: 'Administrador', direcao: 'Direção', gestor: 'Gestor operacional', supervisor: 'Supervisor',
+  administrador: 'Administrador', direcao: 'Direção', gestor: 'Gestor operacional', gestor_conta: 'Gestor de conta', supervisor: 'Supervisor',
   rh: 'Recursos humanos', financeiro: 'Financeiro', colaborador: 'Colaborador',
 }
 
@@ -91,7 +91,7 @@ export default function Layout() {
             <button type="button" onClick={() => setSenha(true)} title="Alterar a minha palavra-passe"
               className="flex items-center gap-2.5 text-[13px] leading-tight text-left rounded-lg px-1.5 py-1 hover:bg-bg">
               <Avatar nome={user.nome} size={34} />
-              <div>{user.nome}<div className="text-xs text-ink-60">{PERFIL[user.perfil] ?? user.perfil}</div></div>
+              <div>{user.nome}<div className="text-xs text-ink-60">{PERFIL[user.perfil] ?? user.perfil}{user.perfil === 'supervisor' ? ` · ${user.zona ?? 'todas as zonas'}` : ''}</div></div>
             </button>
           )}
           {senha && <MinhaSenhaDialog onClose={() => setSenha(false)} />}

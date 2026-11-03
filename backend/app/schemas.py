@@ -21,6 +21,7 @@ class UserOut(ORM):
     nome: str
     email: str
     perfil: str
+    zona: str | None = None  # supervisor: zona supervisionada (None = todas)
 
 
 # ---------------------------------------------------------------- dados mestre
@@ -60,7 +61,7 @@ class ClienteIn(BaseModel):
     email: str | None = None
     url: str | None = None
     contacto_nome: str | None = None
-    gestor_conta: str | None = None
+    gestor_conta_id: int | None = None
     observacoes: str | None = None
     marcas: list[str] = []
 
@@ -77,7 +78,8 @@ class ClienteOut(ORM):
     email: str | None
     url: str | None
     contacto_nome: str | None
-    gestor_conta: str | None
+    gestor_conta_id: int | None
+    gestor_conta: IdNome | None = None
     observacoes: str | None
     ativo: bool
     marcas: list[MarcaOut]

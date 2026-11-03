@@ -35,6 +35,7 @@ class UtilizadorIn(BaseModel):
     email: str = Field(min_length=3, max_length=200)
     perfil: Perfil
     ativo: bool = True
+    zona_id: int | None = None  # supervisor: zona supervisionada (vazio = TODAS)
 
     @field_validator("email")
     @classmethod
@@ -63,7 +64,14 @@ class MinhaPasswordIn(BaseModel):
 
 
 def _out(u: User) -> dict:
-    return {"id": u.id, "nome": u.nome, "email": u.email, "perfil": u.perfil.value, "ativo": u.ativo}
+    return {"id": u.id, "nome": u.nome, "email": u.email, "perfil": u.perfil.value, "ativo": u.ativo,
+            "zona_id": u.zona_id, "zona": u.zona.nome if u.zona else None}
+
+
+def _zona(db: Session, user: User, body: UtilizadorIn) -> int | None:
+    if body.perfil != Perfil.supervisor or not body.zona_id:
+        return None
+    return obter(db, Zona, body.zona_id, user).id
 
 
 def _admins_ativos(db: Session, tenant_id: int, exceto: int | None = None) -> int:
@@ -85,9 +93,10 @@ def criar(body: NovoUtilizadorIn, user: User = Depends(_gestor_utilizadores), db
     if db.scalar(select(User).where(User.email == body.email)):
         raise HTTPException(409, "Já existe um utilizador com este email")
     u = User(tenant_id=user.tenant_id, nome=body.nome, email=body.email, perfil=body.perfil, ativo=body.ativo,
-             password_hash=hash_password(body.password))
+             zona_id=_zona(db, user, body), password_hash=hash_password(body.password))
     db.add(u)
     db.flush()
+    db.refresh(u)
     op.auditar(db, user, "utilizador", u.id, "criar", {"email": u.email, "perfil": u.perfil.value})
     db.commit()
     return _out(u)
@@ -107,6 +116,9 @@ def editar(uid: int, body: UtilizadorIn, user: User = Depends(_gestor_utilizador
         raise HTTPException(409, "Já existe um utilizador com este email")
     antes = _out(u)
     u.nome, u.email, u.perfil, u.ativo = body.nome, body.email, body.perfil, body.ativo
+    u.zona_id = _zona(db, user, body)
+    db.flush()
+    db.refresh(u)
     op.auditar(db, user, "utilizador", u.id, "editar", {"antes": antes, "depois": _out(u)})
     db.commit()
     return _out(u)
@@ -141,7 +153,7 @@ class FeriadoIn(BaseModel):
 
 
 def _gestor_feriados(user: User = Depends(current_user)) -> User:
-    if user.perfil not in (Perfil.administrador, Perfil.direcao, Perfil.gestor):
+    if user.perfil not in (Perfil.administrador, Perfil.direcao, Perfil.gestor, Perfil.gestor_conta):
         raise HTTPException(403, "Sem permissão para gerir feriados")
     return user
 

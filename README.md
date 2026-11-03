@@ -39,7 +39,9 @@ Todos os utilizadores de demonstração usam a palavra-passe `demo1234`:
 | --- | --- |
 | hugo@promovida.pt | Gestor operacional |
 | marta@promovida.pt | Direção |
-| rui@promovida.pt / sara@promovida.pt | Supervisores; só veem a sua equipa |
+| joana@promovida.pt / tomas@promovida.pt | Gestores de conta; acessos do gestor operacional, só nos seus clientes |
+| rui@promovida.pt | Supervisor da zona Amadora; só vê lojas e colaboradores dessa zona |
+| sara@promovida.pt | Supervisora de TODAS as zonas |
 | admin@promovida.pt | Administrador |
 
 ## Modo de desenvolvimento (alterações em direto)
@@ -108,10 +110,10 @@ frontend/
 | Limites de 8 h/dia e 40 h/semana, sem IRCT aplicável. São alertas e não bloqueiam. Não se aplicam a recibos verdes. | Q15, Q16 |
 | A afetação é **persistente**: o colaborador fica na loja até ao fim do contrato. | Master prompt §7 |
 | A substituição altera só aquele turno. O histórico guarda o colaborador previsto e o efetivo. | Master prompt §12 |
-| O supervisor só vê e altera a sua equipa e as lojas a seu cargo. | Master prompt §12 e §20 |
+| O supervisor tem uma zona (ou TODAS): só vê e altera as lojas e os colaboradores dessa zona. O gestor de conta tem os acessos do gestor operacional, limitados aos clientes de que é gestor de conta (definido na ficha do cliente). | Master prompt §12 e §20; pedido de 03/11 |
 | Toda a alteração a contratos, linhas, afetações, turnos, validações e fechos fica na tabela `auditoria`. | Master prompt §21 |
 | Aceitação tácita: um serviço passado, sem registo, conta com as horas planeadas, também para remuneração. Desliga-se por organização. | Q4 |
-| O supervisor (só a sua equipa) e o gestor validam. Corrigir horas já validadas exige motivo e obriga a nova validação. | Q5 |
+| O supervisor (só os colaboradores da sua zona), o gestor e o gestor de conta (só os seus clientes) validam. Corrigir horas já validadas exige motivo e obriga a nova validação. | Q5 |
 | Um serviço rejeitado conta com 0 horas de custo e de remuneração; a faturação de Reposição não muda. | Q1 |
 | Pré-faturação de Reposição: h/semana × 52 ÷ 12 × preço, em proporção dos dias de vigência no mês. Promoções: horas planeadas da campanha no mês. As linhas sem colaborador também são faturadas. Nesta fase é só para consulta. | Q1, Q3, Q7 |
 | Encargos sociais: uma percentagem por tipo de vínculo (em **Configuração**) soma-se ao custo/hora nos custos e margens. O apuramento salarial usa o valor sem encargos. | Decisão de 2 nov 2026 |

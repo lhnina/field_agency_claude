@@ -19,7 +19,7 @@ export default function Tabelas() {
 export function Tabela({ path, titulo, ajuda }: { path: string; titulo: string; ajuda: string }) {
   const qc = useQueryClient()
   const toast = useToast()
-  const pode = ['administrador', 'gestor'].includes(session.user()?.perfil ?? '')
+  const pode = ['administrador', 'gestor', 'gestor_conta'].includes(session.user()?.perfil ?? '')
   const [inativos, setInativos] = useState(false)
   const [novo, setNovo] = useState('')
   const [edit, setEdit] = useState<{ id: number; nome: string } | null>(null)

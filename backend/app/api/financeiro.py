@@ -12,6 +12,7 @@ from app.db import get_db
 from app.models import (
     Colaborador, Contrato, EstadoOcorrencia, LinhaContrato, Ocorrencia, Perfil, TipoContrato, TipoPeriodo, User,
 )
+from app import ambito
 from app.security import requer
 from app.services import fecho
 from app.services.periodos import PeriodoFechadoErro, motivo_bloqueio
@@ -51,9 +52,7 @@ ESTADOS_FILTRO = {
 
 
 def _equipa(db: Session, user: User) -> set[int] | None:
-    if user.perfil != Perfil.supervisor:
-        return None
-    return set(db.scalars(select(Colaborador.id).where(Colaborador.supervisor_id == user.id)).all())
+    return ambito.equipa(db, user)
 
 
 @router.get("/validacao", tags=["validação"])
@@ -74,6 +73,9 @@ def listar_validacao(inicio: date | None = None, fim: date | None = None, estado
                 or_(Ocorrencia.colaborador_previsto_id.is_not(None), Ocorrencia.colaborador_efetivo_id.is_not(None))))
     if cliente_id:
         q = q.where(Contrato.cliente_id == cliente_id)
+    permitidos = ambito.clientes_permitidos(db, user)
+    if permitidos is not None:
+        q = q.where(Contrato.cliente_id.in_(permitidos))
     ocs = db.scalars(q.order_by(Ocorrencia.data, Ocorrencia.id)).unique().all()
     equipa = _equipa(db, user)
     nomes = {c.id: c for c in db.scalars(select(Colaborador).where(Colaborador.tenant_id == user.tenant_id)).all()}
@@ -111,7 +113,10 @@ def _carregar(db: Session, user: User, ids: list[int]) -> list[Ocorrencia]:
                      .where(Ocorrencia.tenant_id == user.tenant_id, Ocorrencia.id.in_(ids))).unique().all()
     equipa = _equipa(db, user)
     if equipa is not None and any(o.colaborador_id not in equipa for o in ocs):
-        raise HTTPException(403, "Só pode validar serviços da sua equipa")
+        raise HTTPException(403, "Só pode validar serviços dos colaboradores da sua zona")
+    permitidos = ambito.clientes_permitidos(db, user)
+    if permitidos is not None and any(o.linha.contrato.cliente_id not in permitidos for o in ocs):
+        raise HTTPException(403, "Só pode validar serviços dos seus clientes")
     return ocs
 
 
@@ -141,18 +146,18 @@ def validar(body: ValidarIn, user: User = Depends(requer("validacao.editar")), d
 @router.get("/prefaturacao", tags=["financeiro"])
 def prefaturacao(mes: str, area: TipoContrato = TipoContrato.REP, user: User = Depends(requer("financeiro.ler")),
                  db: Session = Depends(get_db)):
-    return fecho.prefaturacao(db, user.tenant_id, _mes(mes), area.value, hoje())
+    return fecho.prefaturacao(db, user.tenant_id, _mes(mes), area.value, hoje(), ambito.clientes_permitidos(db, user))
 
 
 # ------------------------------------------------------------------ apuramento
 @router.get("/apuramento", tags=["financeiro"])
 def apuramento(mes: str, user: User = Depends(requer("remuneracoes.ler")), db: Session = Depends(get_db)):
-    return fecho.apuramento(db, user.tenant_id, _mes(mes), hoje())
+    return fecho.apuramento(db, user.tenant_id, _mes(mes), hoje(), clientes=ambito.clientes_permitidos(db, user))
 
 
 @router.get("/apuramento/export.csv", tags=["financeiro"])
 def apuramento_csv(mes: str, user: User = Depends(requer("remuneracoes.ler")), db: Session = Depends(get_db)):
-    dados = fecho.apuramento(db, user.tenant_id, _mes(mes), hoje())
+    dados = fecho.apuramento(db, user.tenant_id, _mes(mes), hoje(), clientes=ambito.clientes_permitidos(db, user))
     nome = f"apuramento-{dados['mes'][:7]}.csv"
     return Response(fecho.apuramento_csv(dados), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{nome}"'})
@@ -199,8 +204,6 @@ def reabrir(body: FechoIn, user: User = Depends(requer("periodo.fechar")), db: S
 @router.get("/colaboradores/{cid}/indicadores", tags=["colaboradores"])
 def indicadores(cid: int, user: User = Depends(requer("colaboradores.ler")), db: Session = Depends(get_db)):
     c = obter(db, Colaborador, cid, user)
-    if user.perfil == Perfil.supervisor and c.supervisor_id != user.id:
-        raise HTTPException(404, "Registo não encontrado")
     return fecho.indicadores_colaborador(db, c, hoje())
 
 

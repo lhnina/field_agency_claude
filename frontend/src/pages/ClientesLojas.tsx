@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BotaoEstado, Facto, MostrarInativos } from '../components/Estado'
 import { AreaBadge, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, Seg, useToast } from '../components/ui'
-import { api } from '../lib/api'
+import { api, session } from '../lib/api'
 import { Tabela } from './Tabelas'
 import { ESTADO_CONTRATO, eur, horas } from '../lib/format'
 import type { Cliente, ContratoResumo, IdNome, Loja, TipoContrato } from '../lib/types'
@@ -75,7 +75,7 @@ function Clientes() {
                     <td><NomeLink nome={c.nome} ativo={c.ativo} onClick={() => setSel(c.id)} />
                       <div className="text-xs text-ink-60">{[c.codigo_erp && `Código ERP ${c.codigo_erp}`, c.nif && `NIF ${c.nif}`].filter(Boolean).join(' · ') || '—'}</div></td>
                     <td className="text-[12.5px]">{c.localidade ?? '—'}</td>
-                    <td className="text-[12.5px]">{c.gestor_conta ?? '—'}</td>
+                    <td className="text-[12.5px]">{c.gestor_conta?.nome ?? '—'}</td>
                     <td className="text-right num">{ca.length}</td>
                     <td className="text-right num">{ca.length ? eur(ca.reduce((s, x) => s + Number(x.valor_mensal), 0), 0) : '—'}</td>
                   </tr>
@@ -97,7 +97,7 @@ function Clientes() {
             <Button size="sm" variant="primary" icon="edit" onClick={() => setEdit(atual)}>Editar</Button>
           </div>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-[18px] py-3.5 border-t border-line-soft">
-            <Facto k="Gestor de conta" v={atual.gestor_conta} />
+            <Facto k="Gestor de conta" v={atual.gestor_conta?.nome} />
             <Facto k="Contacto" v={atual.contacto_nome} />
             <Facto k="Telefone" v={atual.telefone} href={atual.telefone ? `tel:${atual.telefone}` : undefined} />
             <Facto k="Email" v={atual.email} href={atual.email ? `mailto:${atual.email}` : undefined} />
@@ -144,7 +144,7 @@ function Clientes() {
 function ClienteDialog({ cliente, onClose }: { cliente?: Cliente; onClose: () => void }) {
   const qc = useQueryClient()
   const toast = useToast()
-  const campos = ['nome', 'nif', 'codigo_erp', 'morada', 'codigo_postal', 'localidade', 'telefone', 'email', 'url', 'contacto_nome', 'gestor_conta', 'observacoes'] as const
+  const campos = ['nome', 'nif', 'codigo_erp', 'morada', 'codigo_postal', 'localidade', 'telefone', 'email', 'url', 'contacto_nome', 'gestor_conta_id', 'observacoes'] as const
   const [f, setF] = useState<Record<string, string>>(() => {
     const o: Record<string, string> = { marcas: '' }
     campos.forEach((k) => { o[k] = cliente?.[k] != null ? String(cliente[k]) : '' })
@@ -157,11 +157,14 @@ function ClienteDialog({ cliente, onClose }: { cliente?: Cliente; onClose: () =>
       campos.forEach((k) => { body[k] = f[k].trim() || null })
       body.nome = f.nome.trim()
       body.codigo_erp = f.codigo_erp ? Number(f.codigo_erp) : null
+      body.gestor_conta_id = f.gestor_conta_id ? Number(f.gestor_conta_id) : null
       body.marcas = [...(cliente?.marcas.map((x) => x.nome) ?? []), ...f.marcas.split(/[;,]/).map((s) => s.trim()).filter(Boolean)]
       return api(cliente ? `/clientes/${cliente.id}` : '/clientes', { method: cliente ? 'PUT' : 'POST', body })
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['clientes'] }); toast(cliente ? 'Cliente atualizado' : 'Cliente criado'); onClose() },
   })
+  const gestores = useQuery({ queryKey: ['gestores-conta'], queryFn: () => api<IdNome[]>('/utilizadores/gestores-conta') })
+  const souGestorConta = session.user()?.perfil === 'gestor_conta'
   const erpErr = f.codigo_erp && !/^\d+$/.test(f.codigo_erp) ? 'Só números' : null
   const txt = (k: string, label: string, cls = '', type = 'text') => (
     <Field label={label} className={cls}>{(id) => <input id={id} type={type} className="inp" value={f[k]} onChange={set(k)} />}</Field>
@@ -176,7 +179,13 @@ function ClienteDialog({ cliente, onClose }: { cliente?: Cliente; onClose: () =>
         {txt('codigo_postal', 'Código postal')}{txt('localidade', 'Localidade')}
         <Field label="Código de cliente no ERP" error={erpErr}>{(id) => <input id={id} inputMode="numeric" className={`inp ${erpErr ? 'inp-err' : ''}`} value={f.codigo_erp} onChange={set('codigo_erp')} />}</Field>
         {txt('telefone', 'Telefone', '', 'tel')}{txt('email', 'Email', '', 'email')}{txt('url', 'Site')}
-        {txt('contacto_nome', 'Nome de contacto')}{txt('gestor_conta', 'Gestor de conta')}
+        {txt('contacto_nome', 'Nome de contacto')}<Field label="Gestor de conta" hint={souGestorConta ? 'Fica sempre consigo' : undefined}>{(id) => (
+          <select id={id} className="inp" value={souGestorConta ? String(session.user()?.id) : f.gestor_conta_id} disabled={souGestorConta}
+            onChange={(e) => setF({ ...f, gestor_conta_id: e.target.value })}>
+            <option value="">Sem gestor de conta</option>
+            {gestores.data?.map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}
+            {cliente?.gestor_conta && !gestores.data?.some((g) => g.id === cliente.gestor_conta!.id) && <option value={cliente.gestor_conta.id}>{cliente.gestor_conta.nome} (inativo)</option>}
+          </select>)}</Field>
         <Field label={cliente ? 'Acrescentar marcas' : 'Marcas'} hint="Separadas por vírgulas">{(id) => <input id={id} className="inp" value={f.marcas} onChange={set('marcas')} />}</Field>
         <Field label="Observações" className="col-span-3">{(id) => <textarea id={id} className="inp h-20 py-2" value={f.observacoes} onChange={set('observacoes')} />}</Field>
       </div>

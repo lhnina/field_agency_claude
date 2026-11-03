@@ -2,13 +2,15 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Avatar, Badge, Button, Card, ErrorBox, Field, Icon, Loading, Modal, useToast } from '../components/ui'
 import { api, session } from '../lib/api'
+import type { IdNome } from '../lib/types'
 
-type U = { id: number; nome: string; email: string; perfil: string; ativo: boolean }
+type U = { id: number; nome: string; email: string; perfil: string; ativo: boolean; zona_id: number | null; zona: string | null }
 export const PERFIS: Record<string, { label: string; desc: string }> = {
   administrador: { label: 'Administrador', desc: 'Acesso total, incluindo utilizadores e configuração' },
   direcao: { label: 'Direção', desc: 'Consulta tudo, fecha e reabre períodos, configuração' },
   gestor: { label: 'Gestor operacional', desc: 'Contratos, planeamento, validação, importação' },
-  supervisor: { label: 'Supervisor', desc: 'Planeamento, ausências e validação só da sua equipa' },
+  gestor_conta: { label: 'Gestor de conta', desc: 'Os acessos do gestor operacional, mas só nos clientes de que é gestor de conta' },
+  supervisor: { label: 'Supervisor', desc: 'Planeamento, ausências e validação só das lojas e colaboradores da sua zona' },
   rh: { label: 'Recursos humanos', desc: 'Colaboradores, ausências, apuramento de remunerações' },
   financeiro: { label: 'Financeiro', desc: 'Pré-faturação, apuramento, fecho de períodos' },
 }
@@ -31,12 +33,13 @@ export default function Utilizadores() {
         </div>
         <div className="overflow-x-auto">
           <table className="tbl">
-            <thead><tr><th>Nome</th><th>Email</th><th>Perfil</th><th>Estado</th><th /></tr></thead>
+            <thead><tr><th>Nome</th><th>Email</th><th>Perfil</th><th>Zona</th><th>Estado</th><th /></tr></thead>
             <tbody>{q.data?.map((u) => (
               <tr key={u.id} className={u.ativo ? '' : 'opacity-60'}>
                 <td><div className="flex items-center gap-2.5"><Avatar nome={u.nome} /><span className="font-medium">{u.nome}{u.id === eu?.id && <span className="text-xs text-ink-60 font-normal"> (você)</span>}</span></div></td>
                 <td className="text-[12.5px]">{u.email}</td>
                 <td>{PERFIS[u.perfil]?.label ?? u.perfil}</td>
+                <td className="text-[12.5px]">{u.perfil === 'supervisor' ? (u.zona ?? 'Todas') : <span className="text-ink-60">—</span>}</td>
                 <td>{u.ativo ? <Badge tone="ok" dot>Ativo</Badge> : <Badge dot>Inativo</Badge>}</td>
                 <td className="text-right whitespace-nowrap">
                   <Button size="sm" variant="ghost" icon="edit" onClick={() => setEdit(u)}>Editar</Button>
@@ -48,7 +51,7 @@ export default function Utilizadores() {
         </div>
       </Card>
       <p className="text-[12.5px] text-ink-60 flex gap-1.5"><Icon name="alert" size={14} className="mt-0.5" />
-        Os supervisores ficam disponíveis para associar a lojas e colaboradores. Desativar um utilizador impede-o de entrar, mas mantém o histórico.</p>
+        Cada supervisor vê apenas as lojas e os colaboradores da sua zona (ou de todas). Os gestores de conta ficam disponíveis na ficha do cliente. Desativar um utilizador impede-o de entrar, mas mantém o histórico.</p>
       {edit && <UtilizadorDialog u={edit === 'novo' ? null : edit} onClose={() => setEdit(null)} />}
       {senha && <SenhaDialog u={senha} onClose={() => setSenha(null)} />}
     </>
@@ -61,11 +64,12 @@ function UtilizadorDialog({ u, onClose }: { u: U | null; onClose: () => void }) 
   const qc = useQueryClient()
   const toast = useToast()
   const admin = session.user()?.perfil === 'administrador'
-  const [f, setF] = useState({ nome: u?.nome ?? '', email: u?.email ?? '', perfil: u?.perfil ?? 'supervisor', ativo: u?.ativo ?? true, password: '' })
+  const [f, setF] = useState({ nome: u?.nome ?? '', email: u?.email ?? '', perfil: u?.perfil ?? 'supervisor', ativo: u?.ativo ?? true, password: '', zona_id: u?.zona_id ? String(u.zona_id) : '' })
+  const zonas = useQuery({ queryKey: ['zonas'], queryFn: () => api<IdNome[]>('/zonas') })
   const m = useMutation({
-    mutationFn: () => api(u ? `/utilizadores/${u.id}` : '/utilizadores', { method: u ? 'PUT' : 'POST', body: u ? { ...f, password: undefined } : f }),
+    mutationFn: () => api(u ? `/utilizadores/${u.id}` : '/utilizadores', { method: u ? 'PUT' : 'POST', body: { ...f, password: u ? undefined : f.password, zona_id: f.perfil === 'supervisor' && f.zona_id ? Number(f.zona_id) : null } }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['utilizadores'] }); qc.invalidateQueries({ queryKey: ['supervisores'] })
+      qc.invalidateQueries({ queryKey: ['utilizadores'] }); qc.invalidateQueries({ queryKey: ['supervisores'] }); qc.invalidateQueries({ queryKey: ['gestores-conta'] })
       toast(u ? 'Utilizador atualizado' : 'Utilizador criado. Comunique-lhe a palavra-passe temporária.'); onClose()
     },
   })
@@ -81,6 +85,10 @@ function UtilizadorDialog({ u, onClose }: { u: U | null; onClose: () => void }) 
           <select id={id} className="inp" value={f.perfil} onChange={(e) => setF({ ...f, perfil: e.target.value })}>
             {Object.entries(PERFIS).filter(([k]) => admin || k !== 'administrador' || u?.perfil === k).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
           </select>)}</Field>
+        {f.perfil === 'supervisor' && <Field label="Zona que supervisiona" className="col-span-2" hint="Só vê as lojas e os colaboradores desta zona. TODAS = supervisiona todas as zonas.">{(id) => (
+          <select id={id} className="inp" value={f.zona_id} onChange={(e) => setF({ ...f, zona_id: e.target.value })}>
+            <option value="">TODAS</option>{zonas.data?.map((z) => <option key={z.id} value={z.id}>{z.nome}</option>)}
+          </select>)}</Field>}
         {!u && <Field label="Palavra-passe temporária" className="col-span-2" error={pe} hint="O utilizador pode alterá-la depois de entrar">
           {(id) => <input id={id} className={`inp ${pe ? 'inp-err' : ''}`} value={f.password} autoComplete="new-password" onChange={(e) => setF({ ...f, password: e.target.value })} />}</Field>}
         {u && <label className="col-span-2 flex items-center gap-2 text-[13.5px]"><input type="checkbox" className="w-4 h-4 accent-petrol-600" checked={f.ativo} onChange={(e) => setF({ ...f, ativo: e.target.checked })} />Ativo</label>}

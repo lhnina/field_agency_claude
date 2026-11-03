@@ -37,7 +37,8 @@ def run(reset: bool = True) -> None:
     users = {}
     for key, nome, perfil in [("admin", "Administrador", Perfil.administrador), ("marta", "Marta Ribeiro", Perfil.direcao),
                               ("hugo", "Hugo Faria", Perfil.gestor), ("rui", "Rui Matos", Perfil.supervisor),
-                              ("sara", "Sara Guedes", Perfil.supervisor)]:
+                              ("sara", "Sara Guedes", Perfil.supervisor), ("joana", "Joana Pires", Perfil.gestor_conta),
+                              ("tomas", "Tomás Reis", Perfil.gestor_conta)]:
         u = User(tenant_id=T, email=f"{key}@promovida.pt", nome=nome, password_hash=pw, perfil=perfil)
         db.add(u)
         users[key] = u
@@ -47,6 +48,7 @@ def run(reset: bool = True) -> None:
     ins = {n: Insignia(tenant_id=T, nome=n) for n in ["Continente", "Pingo Doce", "Auchan", "Intermarché", "Lidl"]}
     db.add_all(list(zonas.values()) + list(ins.values()))
     db.flush()
+    users["rui"].zona_id = zonas["Amadora"].id   # supervisiona a Amadora; a Sara supervisiona TODAS as zonas
     for ano in (date.today().year, date.today().year + 1):
         db.add(Feriado(tenant_id=T, zona_id=zonas["Amadora"].id, data=date(ano, 9, 11), nome="Feriado municipal da Amadora"))
 
@@ -68,11 +70,13 @@ def run(reset: bool = True) -> None:
         lojas[nome] = lj
 
     clientes = {}
+    GESTOR_CONTA = {"Bom Grão Cafés": "joana", "Nata Doce Gelados": "joana", "Pura Higiene": "joana",
+                    "Atlântico Conservas": "tomas", "Quinta do Vale Sumos": "tomas", "Montado Vinhos": "tomas"}
     for nome, marcas, erp in [("Bom Grão Cafés", ["Bom Grão"], 1201), ("Atlântico Conservas", ["Atlântico", "Mar Azul"], 1188),
                               ("Nata Doce Gelados", ["Nata Doce"], 1310), ("Pura Higiene", ["Pura"], 1022),
                               ("Quinta do Vale Sumos", ["Quinta do Vale"], 1254), ("Montado Vinhos", ["Montado"], 1099)]:
         c = Cliente(tenant_id=T, nome=nome, codigo_erp=erp, marcas=[Marca(tenant_id=T, nome=m) for m in marcas],
-                    localidade="Lisboa", gestor_conta="Hugo Faria", contacto_nome="Departamento comercial",
+                    localidade="Lisboa", gestor_conta_id=users[GESTOR_CONTA[nome]].id, contacto_nome="Departamento comercial",
                     email="comercial@" + nome.split()[0].lower().replace("ã", "a").replace("â", "a") + ".pt")
         db.add(c)
         clientes[nome] = c
@@ -181,7 +185,7 @@ def run(reset: bool = True) -> None:
             fecho.registar_execucao(db, users["rui"], o, max(o.horas_planeadas - D("1"), D("0")), "Saiu mais cedo (loja sem stock)", hoje)
     db.commit()
     db.close()
-    print("Dados de demonstração criados. Utilizadores: marta|hugo|rui|sara|admin@promovida.pt / demo1234")
+    print("Dados de demonstração criados. Utilizadores: marta|hugo|joana|tomas|rui|sara|admin@promovida.pt / demo1234")
 
 
 if __name__ == "__main__":

@@ -6,7 +6,7 @@ export type Vinculo = 'sem_termo' | 'a_termo' | 'muito_curta_duracao' | 'recibos
 export type Cliente = {
   id: number; nome: string; nif: string | null; codigo_erp: number | null; morada: string | null; codigo_postal: string | null
   localidade: string | null; telefone: string | null; email: string | null; url: string | null; contacto_nome: string | null
-  gestor_conta: string | null; observacoes: string | null; ativo: boolean; marcas: (IdNome & { ativo?: boolean })[]
+  gestor_conta_id: number | null; gestor_conta: IdNome | null; observacoes: string | null; ativo: boolean; marcas: (IdNome & { ativo?: boolean })[]
 }
 
 export type Loja = {

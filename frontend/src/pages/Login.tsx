@@ -11,8 +11,10 @@ const PERFIS_DEMO = [
   { perfil: 'Administrador', nome: 'Administrador', email: 'admin@promovida.pt' },
   { perfil: 'Direção', nome: 'Marta Ribeiro', email: 'marta@promovida.pt' },
   { perfil: 'Gestor operacional', nome: 'Hugo Faria', email: 'hugo@promovida.pt' },
-  { perfil: 'Supervisor', nome: 'Rui Matos', email: 'rui@promovida.pt' },
-  { perfil: 'Supervisor', nome: 'Sara Guedes', email: 'sara@promovida.pt' },
+  { perfil: 'Gestor de conta', nome: 'Joana Pires', email: 'joana@promovida.pt' },
+  { perfil: 'Gestor de conta', nome: 'Tomás Reis', email: 'tomas@promovida.pt' },
+  { perfil: 'Supervisor · Amadora', nome: 'Rui Matos', email: 'rui@promovida.pt' },
+  { perfil: 'Supervisor · Todas', nome: 'Sara Guedes', email: 'sara@promovida.pt' },
 ]
 
 export default function Login() {

@@ -11,6 +11,7 @@ from app.models import (
     Afetacao, Ausencia, Colaborador, Contrato, EstadoContrato, EstadoOcorrencia, LinhaContrato, Ocorrencia, Perfil, User,
 )
 from app.schemas import AusenciaIn, AusenciaOut, ColaboradorIn, ColaboradorOut, EstadoAtivoIn
+from app import ambito
 from app.security import requer
 from app.services import operacao as op
 
@@ -18,8 +19,9 @@ router = APIRouter(tags=["colaboradores"])
 
 
 def _scope(s, user: User):
-    if user.perfil == Perfil.supervisor:
-        s = s.where(Colaborador.supervisor_id == user.id)
+    zona = ambito.zona_supervisor(user)
+    if zona is not None:
+        s = s.where(Colaborador.zona_id == zona)
     return s
 
 
@@ -71,12 +73,13 @@ def _carga(db: Session, ids: list[int]) -> dict[int, Decimal]:
 def afetacoes(cid: int, user: User = Depends(requer("colaboradores.ler")), db: Session = Depends(get_db)):
     """Lojas em que o colaborador está afeto hoje, com as horas de cada dia."""
     c = obter(db, Colaborador, cid, user)
-    if user.perfil == Perfil.supervisor and c.supervisor_id != user.id:
-        raise HTTPException(404, "Registo não encontrado")
     dias = ("Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom")
     res = []
+    permitidos = ambito.clientes_permitidos(db, user)
     for a in _afetacoes_vigentes(db, [c.id]):
         ln = a.linha
+        if permitidos is not None and ln.contrato.cliente_id not in permitidos:
+            continue
         res.append({"linha_id": ln.id, "loja": ln.loja.nome, "cliente": ln.contrato.cliente.nome, "contrato_id": ln.contrato_id,
                     "contrato_numero": ln.contrato.numero, "tipo": ln.contrato.tipo.value, "horas_semana": float(ln.horas_semana),
                     "dias": [f"{d} {float(ln.horas_dia(i)):g}h".replace(".", ",") for i, d in enumerate(dias) if ln.horas_dia(i) > 0],
@@ -87,8 +90,6 @@ def afetacoes(cid: int, user: User = Depends(requer("colaboradores.ler")), db: S
 @router.get("/colaboradores/{cid}", response_model=ColaboradorOut)
 def detalhe(cid: int, user: User = Depends(requer("colaboradores.ler")), db: Session = Depends(get_db)):
     c = obter(db, Colaborador, cid, user)
-    if user.perfil == Perfil.supervisor and c.supervisor_id != user.id:
-        raise HTTPException(404, "Registo não encontrado")
     out = ColaboradorOut.model_validate(c)
     out.horas_afetadas = _carga(db, [c.id]).get(c.id, Decimal("0"))
     return out
@@ -153,8 +154,9 @@ def _aus_out(db: Session, a: Ausencia) -> AusenciaOut:
 @router.get("/ausencias", response_model=list[AusenciaOut], tags=["ausências"])
 def ausencias(desde: date | None = None, user: User = Depends(requer("colaboradores.ler")), db: Session = Depends(get_db)):
     s = select(Ausencia).join(Colaborador).where(Ausencia.tenant_id == user.tenant_id)
-    if user.perfil == Perfil.supervisor:
-        s = s.where(Colaborador.supervisor_id == user.id)
+    zona = ambito.zona_supervisor(user)
+    if zona is not None:
+        s = s.where(Colaborador.zona_id == zona)
     if desde:
         s = s.where(Ausencia.fim >= desde)
     return [_aus_out(db, a) for a in db.scalars(s.order_by(Ausencia.inicio)).all()]
@@ -163,8 +165,6 @@ def ausencias(desde: date | None = None, user: User = Depends(requer("colaborado
 @router.post("/ausencias", response_model=AusenciaOut, status_code=201, tags=["ausências"])
 def criar_ausencia(body: AusenciaIn, user: User = Depends(requer("ausencias.editar")), db: Session = Depends(get_db)):
     c = obter(db, Colaborador, body.colaborador_id, user)
-    if user.perfil == Perfil.supervisor and c.supervisor_id != user.id:
-        raise HTTPException(403, "Só pode registar ausências da sua equipa")
     a = Ausencia(tenant_id=user.tenant_id, **body.model_dump())
     db.add(a)
     db.flush()

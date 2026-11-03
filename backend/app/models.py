@@ -44,6 +44,7 @@ class Perfil(str, enum.Enum):
     administrador = "administrador"
     direcao = "direcao"
     gestor = "gestor"
+    gestor_conta = "gestor_conta"  # como o gestor, mas só nos clientes de que é gestor de conta
     supervisor = "supervisor"
     rh = "rh"
     financeiro = "financeiro"
@@ -58,6 +59,9 @@ class User(TenantMixin, Base):
     password_hash: Mapped[str] = mapped_column(String(200))
     perfil: Mapped[Perfil] = mapped_column(Enum(Perfil, name="perfil"))
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Supervisor: zona que supervisiona (vazio = TODAS as zonas)
+    zona_id: Mapped[int | None] = mapped_column(ForeignKey("zonas.id"))
+    zona: Mapped["Zona | None"] = relationship()
 
 
 # ---------------------------------------------------------------- dados mestre
@@ -74,10 +78,11 @@ class Cliente(TenantMixin, Base):
     email: Mapped[str | None] = mapped_column(String(160))
     url: Mapped[str | None] = mapped_column(String(250))
     contacto_nome: Mapped[str | None] = mapped_column(String(120))
-    gestor_conta: Mapped[str | None] = mapped_column(String(120))  # texto livre nesta fase
+    gestor_conta_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
     observacoes: Mapped[str | None] = mapped_column(Text)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     marcas: Mapped[list["Marca"]] = relationship(back_populates="cliente", cascade="all, delete-orphan")
+    gestor_conta: Mapped["User | None"] = relationship(foreign_keys=[gestor_conta_id])
 
 
 class Marca(TenantMixin, Base):

@@ -138,13 +138,15 @@ def horas_custo(o: Ocorrencia) -> Decimal:
     return o.horas_executadas or Z
 
 
-def _ocorrencias_mes(db: Session, tenant_id: int, mes: date, area: str | None = None):
+def _ocorrencias_mes(db: Session, tenant_id: int, mes: date, area: str | None = None, clientes: set[int] | None = None):
     q = (select(Ocorrencia).join(LinhaContrato).join(Contrato)
          .options(joinedload(Ocorrencia.linha).joinedload(LinhaContrato.contrato).joinedload(Contrato.cliente),
                   joinedload(Ocorrencia.linha).joinedload(LinhaContrato.loja))
          .where(Ocorrencia.tenant_id == tenant_id, Ocorrencia.data >= mes, Ocorrencia.data < proximo_mes(mes)))
     if area:
         q = q.where(Contrato.tipo == area)
+    if clientes is not None:
+        q = q.where(Contrato.cliente_id.in_(clientes))
     return db.scalars(q).unique().all()
 
 
@@ -153,13 +155,13 @@ def _colabs(db: Session, tenant_id: int) -> dict[int, Colaborador]:
 
 
 # ------------------------------------------------------------------ pré-faturação
-def prefaturacao(db: Session, tenant_id: int, mes: date, area: str, hoje: date) -> dict:
+def prefaturacao(db: Session, tenant_id: int, mes: date, area: str, hoje: date, clientes: set[int] | None = None) -> dict:
     mes = inicio_mes(mes)
     fim = proximo_mes(mes)
     dias_mes = monthrange(mes.year, mes.month)[1]
     colabs = _colabs(db, tenant_id)
     tenant = db.get(Tenant, tenant_id)
-    ocs = _ocorrencias_mes(db, tenant_id, mes, area)
+    ocs = _ocorrencias_mes(db, tenant_id, mes, area, clientes)
     por_linha: dict[int, list[Ocorrencia]] = defaultdict(list)
     for o in ocs:
         por_linha[o.linha_id].append(o)
@@ -168,7 +170,8 @@ def prefaturacao(db: Session, tenant_id: int, mes: date, area: str, hoje: date) 
         joinedload(Contrato.cliente), joinedload(Contrato.linhas).joinedload(LinhaContrato.loja)).where(
         Contrato.tenant_id == tenant_id, Contrato.tipo == area,
         Contrato.estado.in_((EstadoContrato.ativo, EstadoContrato.terminado)),
-        Contrato.inicio < fim, or_(Contrato.fim.is_(None), Contrato.fim >= mes))).unique().all()
+        Contrato.inicio < fim, or_(Contrato.fim.is_(None), Contrato.fim >= mes),
+        *([Contrato.cliente_id.in_(clientes)] if clientes is not None else []))).unique().all()
 
     clientes: dict[int, dict] = {}
     tot = defaultdict(lambda: Z)
@@ -227,12 +230,13 @@ def prefaturacao(db: Session, tenant_id: int, mes: date, area: str, hoje: date) 
 
 
 # ------------------------------------------------------------------ apuramento de remunerações
-def apuramento(db: Session, tenant_id: int, mes: date, hoje: date, supervisor_id: int | None = None) -> dict:
+def apuramento(db: Session, tenant_id: int, mes: date, hoje: date, supervisor_id: int | None = None,
+               clientes: set[int] | None = None) -> dict:
     mes = inicio_mes(mes)
     colabs = _colabs(db, tenant_id)
     linhas: dict[tuple[int, int], dict] = {}
     pend_por_colab: dict[int, int] = defaultdict(int)
-    for o in _ocorrencias_mes(db, tenant_id, mes):
+    for o in _ocorrencias_mes(db, tenant_id, mes, clientes=clientes):
         cid = o.colaborador_id
         if cid is None or o.estado == EstadoOcorrencia.cancelado:
             continue

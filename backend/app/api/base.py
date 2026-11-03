@@ -10,6 +10,7 @@ from app.models import Cliente, Contrato, EstadoContrato, Insignia, LinhaContrat
 from app.schemas import ClienteIn, ClienteOut, EstadoAtivoIn, IdNome, IdNomeAtivo, LojaIn, LojaOut, Nome, TokenOut, UserOut
 from app.security import create_token, current_user, requer, verify_password
 from app.services import operacao as op
+from app import ambito
 
 router = APIRouter()
 
@@ -18,6 +19,7 @@ def obter(db: Session, model, id_: int, user: User):
     obj = db.get(model, id_)
     if obj is None or getattr(obj, "tenant_id", user.tenant_id) != user.tenant_id:
         raise HTTPException(404, "Registo não encontrado")
+    ambito.verificar(db, user, obj)
     return obj
 
 
@@ -26,12 +28,18 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
     user = db.scalar(select(User).where(User.email == form.username.lower().strip()))
     if not user or not user.ativo or not verify_password(form.password, user.password_hash):
         raise HTTPException(401, "Email ou palavra-passe incorretos")
-    return TokenOut(access_token=create_token(user), user=UserOut(id=user.id, nome=user.nome, email=user.email, perfil=user.perfil.value))
+    return TokenOut(access_token=create_token(user), user=UserOut(id=user.id, nome=user.nome, email=user.email, perfil=user.perfil.value, zona=user.zona.nome if user.zona else None))
 
 
 @router.get("/auth/me", response_model=UserOut, tags=["auth"])
 def me(user: User = Depends(current_user)):
-    return UserOut(id=user.id, nome=user.nome, email=user.email, perfil=user.perfil.value)
+    return UserOut(id=user.id, nome=user.nome, email=user.email, perfil=user.perfil.value, zona=user.zona.nome if user.zona else None)
+
+
+@router.get("/utilizadores/gestores-conta", response_model=list[IdNome], tags=["auth"])
+def gestores_conta(user: User = Depends(requer("dados_mestre.ler")), db: Session = Depends(get_db)):
+    return db.scalars(select(User).where(User.tenant_id == user.tenant_id, User.perfil == Perfil.gestor_conta,
+                                         User.ativo.is_(True)).order_by(User.nome)).all()
 
 
 @router.get("/utilizadores/supervisores", response_model=list[IdNome], tags=["auth"])
@@ -94,7 +102,7 @@ _simple(Insignia, "insignias", "dados mestre", "insignia")
 
 # ---------------------------------------------------------------- clientes
 CAMPOS_CLIENTE = ("nome", "nif", "codigo_erp", "morada", "codigo_postal", "localidade", "telefone", "email", "url",
-                  "contacto_nome", "gestor_conta", "observacoes")
+                  "contacto_nome", "gestor_conta_id", "observacoes")
 
 
 @router.get("/clientes", response_model=list[ClienteOut], tags=["dados mestre"])
@@ -105,6 +113,9 @@ def clientes(inativos: bool = False, q: str | None = None, user: User = Depends(
         s = s.where(Cliente.ativo.is_(True))
     if q:
         s = s.where(Cliente.nome.ilike(f"%{q}%") | Cliente.nif.ilike(f"%{q}%"))
+    permitidos = ambito.clientes_permitidos(db, user)
+    if permitidos is not None:
+        s = s.where(Cliente.id.in_(permitidos))
     out = db.scalars(s.order_by(Cliente.ativo.desc(), Cliente.nome)).all()
     for c in out:  # marcas inativas só aparecem na ficha
         c.marcas.sort(key=lambda m: (not m.ativo, m.nome))
@@ -114,6 +125,16 @@ def clientes(inativos: bool = False, q: str | None = None, user: User = Depends(
 @router.get("/clientes/{cid}", response_model=ClienteOut, tags=["dados mestre"])
 def cliente(cid: int, user: User = Depends(requer("dados_mestre.ler")), db: Session = Depends(get_db)):
     return obter(db, Cliente, cid, user)
+
+
+def _gestor_conta(db: Session, user: User, body: ClienteIn) -> None:
+    """Valida o gestor de conta escolhido; o gestor de conta fica sempre como gestor dos clientes que cria ou edita."""
+    if user.perfil == Perfil.gestor_conta:
+        body.gestor_conta_id = user.id
+    elif body.gestor_conta_id is not None:
+        g = db.get(User, body.gestor_conta_id)
+        if not g or g.tenant_id != user.tenant_id or g.perfil != Perfil.gestor_conta:
+            raise HTTPException(422, "O gestor de conta tem de ser um utilizador com o perfil Gestor de conta")
 
 
 def _marcas(c: Cliente, nomes: list[str], tenant_id: int) -> None:
@@ -132,6 +153,7 @@ def _marcas(c: Cliente, nomes: list[str], tenant_id: int) -> None:
 def criar_cliente(body: ClienteIn, user: User = Depends(requer("dados_mestre.editar")), db: Session = Depends(get_db)):
     if db.scalar(select(Cliente).where(Cliente.tenant_id == user.tenant_id, func.lower(Cliente.nome) == body.nome.strip().lower())):
         raise HTTPException(409, "Já existe um cliente com este nome")
+    _gestor_conta(db, user, body)
     c = Cliente(tenant_id=user.tenant_id, **{k: getattr(body, k) for k in CAMPOS_CLIENTE})
     _marcas(c, body.marcas, user.tenant_id)
     db.add(c)
@@ -144,6 +166,7 @@ def criar_cliente(body: ClienteIn, user: User = Depends(requer("dados_mestre.edi
 @router.put("/clientes/{cid}", response_model=ClienteOut, tags=["dados mestre"])
 def editar_cliente(cid: int, body: ClienteIn, user: User = Depends(requer("dados_mestre.editar")), db: Session = Depends(get_db)):
     c = obter(db, Cliente, cid, user)
+    _gestor_conta(db, user, body)
     antes = {k: getattr(c, k) for k in CAMPOS_CLIENTE}
     for k in CAMPOS_CLIENTE:
         setattr(c, k, getattr(body, k))
@@ -183,6 +206,9 @@ def lojas(q: str | None = None, zona_id: int | None = None, inativos: bool = Fal
             s = s.where(Loja.nome.ilike(t) | Loja.localidade.ilike(t) | Loja.codigo_postal.ilike(t) | Loja.morada.ilike(t))
     if zona_id:
         s = s.where(Loja.zona_id == zona_id)
+    zona = ambito.zona_supervisor(user)
+    if zona is not None:
+        s = s.where(Loja.zona_id == zona)
     s = s.order_by(Loja.ativo.desc(), Loja.nome)
     if limite:
         s = s.limit(min(limite, 200))
@@ -202,6 +228,9 @@ def loja_servicos(lid: int, user: User = Depends(requer("dados_mestre.ler")), db
     linhas = db.scalars(select(LinhaContrato).join(Contrato).where(
         LinhaContrato.loja_id == lj.id, Contrato.estado.in_((EstadoContrato.ativo, EstadoContrato.proposta)),
         or_(LinhaContrato.fim.is_(None), LinhaContrato.fim >= hoje))).all()
+    permitidos = ambito.clientes_permitidos(db, user)
+    if permitidos is not None:
+        linhas = [ln for ln in linhas if ln.contrato.cliente_id in permitidos]
     out = []
     for ln in linhas:
         af = op.afetacao_em(ln, max(hoje, ln.inicio))

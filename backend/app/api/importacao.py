@@ -12,7 +12,7 @@ router = APIRouter(prefix="/importacao", tags=["importação"])
 
 PERFIS = {
     "clientes": {Perfil.administrador, Perfil.gestor},
-    "lojas": {Perfil.administrador, Perfil.gestor},
+    "lojas": {Perfil.administrador, Perfil.gestor, Perfil.gestor_conta},
     "contratos": {Perfil.administrador, Perfil.gestor},
     "colaboradores": {Perfil.administrador, Perfil.gestor, Perfil.rh},
 }
