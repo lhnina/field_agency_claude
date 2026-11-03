@@ -221,7 +221,7 @@ function ColabDialog({ c, onClose }: { c: Colaborador | null; onClose: () => voi
           </select>)}</Field>
         <Field label="Zona">{(id) => <select id={id} className="inp" value={f.zona_id} onChange={set('zona_id')}><option value="">—</option>{zonas.data?.map((z) => <option key={z.id} value={z.id}>{z.nome}</option>)}</select>}</Field>
         <Field label="Supervisor">{(id) => <select id={id} className="inp" value={f.supervisor_id} onChange={set('supervisor_id')}><option value="">—</option>{sups.data?.map((z) => <option key={z.id} value={z.id}>{z.nome}</option>)}</select>}</Field>
-        <Field label="Custo por hora (€)" hint="Pode ser definido um custo especial por serviço no contrato">{(id) => <input id={id} inputMode="decimal" className="inp num" value={f.custo_hora} onChange={set('custo_hora')} />}</Field>
+        <Field label="Custo por hora (€)" hint="Pode ser definido um Custo Fixo por loja no contrato">{(id) => <input id={id} inputMode="decimal" className="inp num" value={f.custo_hora} onChange={set('custo_hora')} />}</Field>
         <Field label="Data de início">{(id) => <input id={id} type="date" className="inp" value={f.data_inicio} onChange={set('data_inicio')} />}</Field>
         <Field label="Telemóvel">{(id) => <input id={id} className="inp" value={f.telefone} onChange={set('telefone')} />}</Field>
         <Field label="Email">{(id) => <input id={id} type="email" className="inp" value={f.email} onChange={set('email')} />}</Field>

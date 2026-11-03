@@ -9,7 +9,7 @@ Regras (respostas ao documento de análise):
 - Q4: aceitação tácita — sem registo, a ocorrência conta com as horas planeadas, também
   para remuneração.
 - Q5: supervisor e gestor podem validar.
-- Q6: custo = valor/hora da ficha do colaborador, ou o custo especial da linha.
+- Q6: custo = valor/hora da ficha do colaborador, ou o Custo Fixo da linha (custo_hora_especial).
 - Q8: para o ERP basta colaborador, cliente, horas trabalhadas e valor dessas horas.
 """
 import csv
@@ -119,7 +119,7 @@ def validar(db: Session, user: User, ocorrencias: list[Ocorrencia], aprovar: boo
 
 # ------------------------------------------------------------------ custo
 def custo_hora(o: Ocorrencia, colabs: dict[int, Colaborador], tenant: Tenant | None = None) -> Decimal:
-    """Valor/hora do colaborador (ou custo especial da linha). Com `tenant`, soma os
+    """Valor/hora do colaborador (ou Custo Fixo da linha). Com `tenant`, soma os
     encargos da agência do tipo de vínculo — é o custo usado nas margens. Sem `tenant`
     é o valor pago ao colaborador, usado no apuramento de remunerações."""
     c = colabs.get(o.colaborador_id) if o.colaborador_id else None

@@ -167,7 +167,7 @@ function LinhaDialog({ contrato, linha, onClose, onSaved }: { contrato: Contrato
           <div className="text-xs text-ink-60 mt-1.5 num">Total {num(total)} h/semana · {num(total * 52 / 12)} h/mês · {eur(total * 52 / 12 * (Number(String(f.preco_hora).replace(',', '.')) || 0))}/mês</div>
         </div>
         <Field label="Preço por hora (€)">{(id) => <input id={id} inputMode="decimal" className="inp num" value={f.preco_hora} onChange={(e) => setF({ ...f, preco_hora: e.target.value })} />}</Field>
-        <Field label="Custo/hora especial (€)" hint="Vazio = custo da ficha do colaborador">{(id) => <input id={id} inputMode="decimal" className="inp num" value={f.custo_hora_especial} onChange={(e) => setF({ ...f, custo_hora_especial: e.target.value })} />}</Field>
+        <Field label="Custo Fixo (€/h)" hint="Vazio = custo do colaborador">{(id) => <input id={id} inputMode="decimal" className="inp num" value={f.custo_hora_especial} onChange={(e) => setF({ ...f, custo_hora_especial: e.target.value })} />}</Field>
         <Field label="Início">{(id) => <input id={id} type="date" className="inp" value={f.inicio} onChange={(e) => setF({ ...f, inicio: e.target.value })} />}</Field>
         <Field label="Fim" hint="Vazio = até ao fim do contrato">{(id) => <input id={id} type="date" className="inp" value={f.fim} onChange={(e) => setF({ ...f, fim: e.target.value })} />}</Field>
         {pro && <>

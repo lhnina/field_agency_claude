@@ -102,7 +102,7 @@ frontend/
 | Faturação por horas **contratadas**. As executadas servem para apurar o custo. | Q1 |
 | As horas de cada linha são definidas por dia da semana (Seg a Dom). | Q2 |
 | Horas/mês = horas/semana × 52 ÷ 12. Valor mensal = horas/mês × preço/hora. | Q3 |
-| O custo/hora vem da ficha do colaborador; cada linha pode ter um custo especial. | Q6 |
+| O custo/hora vem da ficha do colaborador; cada linha pode ter um Custo Fixo (€/h) que o substitui. | Q6 |
 | Feriado: o serviço passa para outro dia, de preferência o próximo dia útil da mesma semana sem horas nessa linha. Os feriados nacionais são calculados para qualquer ano, incluindo a Páscoa, a Sexta-feira Santa e o Corpo de Deus. Os municipais aplicam-se às lojas da zona. Criar um feriado reagenda os serviços já planeados nessa data. | Q9 |
 | Utilizadores: a Direção e o Administrador gerem utilizadores; só um Administrador cria ou altera administradores. Ninguém se desativa a si próprio e tem de ficar sempre um Administrador ativo. Palavras-passe com pelo menos 8 caracteres, letras e números. | §20 |
 | Limites de 8 h/dia e 40 h/semana, sem IRCT aplicável. São alertas e não bloqueiam. Não se aplicam a recibos verdes. | Q15, Q16 |
@@ -115,7 +115,7 @@ frontend/
 | Um serviço rejeitado conta com 0 horas de custo e de remuneração; a faturação de Reposição não muda. | Q1 |
 | Pré-faturação de Reposição: h/semana × 52 ÷ 12 × preço, em proporção dos dias de vigência no mês. Promoções: horas planeadas da campanha no mês. As linhas sem colaborador também são faturadas. Nesta fase é só para consulta. | Q1, Q3, Q7 |
 | Encargos sociais: uma percentagem por tipo de vínculo (em **Configuração**) soma-se ao custo/hora nos custos e margens. O apuramento salarial usa o valor sem encargos. | Decisão de 2 nov 2026 |
-| Apuramento: horas validadas × custo/hora do colaborador (ou custo especial da linha), por colaborador e cliente. Os prestadores aparecem separados. CSV com `;`, decimais com vírgula e UTF-8. | Q6, Q8 |
+| Apuramento: horas validadas × custo/hora do colaborador (ou Custo Fixo da linha), por colaborador e cliente. Os prestadores aparecem separados. CSV com `;`, decimais com vírgula e UTF-8. | Q6, Q8 |
 | Fecho mensal: a faturação fecha por área e a remuneração fecha o mês inteiro, que só fecha sem serviços por validar. Depois do fecho, nada desse mês se altera. Só a Direção ou o Administrador reabrem. | R10, R11 |
 | Muito curta duração: alerta a partir de 56 de 70 dias no ano e de 28 de 35 dias seguidos; erro quando se excede. | Código do Trabalho, art. 142.º |
 

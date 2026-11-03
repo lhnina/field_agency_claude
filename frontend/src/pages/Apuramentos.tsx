@@ -37,7 +37,7 @@ export default function Apuramentos() {
   return (
     <>
       <PageHeader crumb="Financeiro" title="Apuramento de remunerações"
-        sub="Horas validadas por colaborador e cliente, valorizadas ao custo/hora (ou ao custo especial da linha). Para processamento no ERP.">
+        sub="Horas validadas por colaborador e cliente, valorizadas ao custo/hora (ou ao Custo Fixo da loja no contrato). Para processamento no ERP.">
         <MesInput value={mes} onChange={setMes} />
         <Button icon="receipt" onClick={exportar} disabled={!d?.colaboradores.length}>Exportar para o ERP (CSV)</Button>
         {d && <FechoPeriodo tipo="remuneracao" mes={mes} fechado={d.fechado} onDone={() => qc.invalidateQueries({ queryKey: ['apuramento'] })}
