@@ -11,7 +11,7 @@ Plataforma de gestão operacional para agências de field marketing: reposição
 - ausências e substituições;
 - execução e validação de horas, com aceitação tácita;
 - pré-faturação por área e mês;
-- apuramento de remunerações com exportação CSV para o PHC;
+- apuramento de remunerações com exportação CSV para o ERP;
 - fecho e reabertura de períodos;
 - contador da muito curta duração;
 - importação inicial por Excel de clientes, lojas, colaboradores e contratos (menu **Importar dados**);
@@ -140,4 +140,4 @@ Clientes, lojas e colaboradores que já existem são atualizados; as células va
 
 - Documentação com validades (B17) e alertas no planeamento.
 - App do colaborador (PWA): escala, confirmação e registo de horas (B18). Passa a alimentar a origem "registo" na validação.
-- Envio da pré-faturação para o PHC, como dossier interno BO/BI com detalhe por loja (Q7, fase 2).
+- Envio da pré-faturação para o ERP, como dossier interno BO/BI com detalhe por loja (Q7, fase 2).

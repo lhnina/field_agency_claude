@@ -10,7 +10,7 @@ Regras (respostas ao documento de análise):
   para remuneração.
 - Q5: supervisor e gestor podem validar.
 - Q6: custo = valor/hora da ficha do colaborador, ou o custo especial da linha.
-- Q8: para o PHC basta colaborador, cliente, horas trabalhadas e valor dessas horas.
+- Q8: para o ERP basta colaborador, cliente, horas trabalhadas e valor dessas horas.
 """
 import csv
 import io
@@ -208,7 +208,7 @@ def prefaturacao(db: Session, tenant_id: int, mes: date, area: str, hoje: date) 
             continue
         cdict["totais"] = {k: float(v) for k, v in ctot.items()}
         cl = clientes.setdefault(c.cliente_id, {"cliente_id": c.cliente_id, "cliente": c.cliente.nome,
-                                                "codigo_phc": c.cliente.codigo_phc, "contratos": [],
+                                                "codigo_erp": c.cliente.codigo_erp, "contratos": [],
                                                 "totais": defaultdict(lambda: Z)})
         cl["contratos"].append(cdict)
         for k, v in ctot.items():
@@ -247,7 +247,7 @@ def apuramento(db: Session, tenant_id: int, mes: date, hoje: date, supervisor_id
         cli = o.linha.contrato.cliente
         vh = custo_hora(o, colabs)
         k = (cid, cli.id, vh)
-        r = linhas.setdefault(k, {"cliente_id": cli.id, "cliente": cli.nome, "codigo_phc": cli.codigo_phc,
+        r = linhas.setdefault(k, {"cliente_id": cli.id, "cliente": cli.nome, "codigo_erp": cli.codigo_erp,
                                   "valor_hora": vh, "horas": Z, "tacitas": 0, "servicos": 0})
         r["horas"] += o.horas_aprovadas or Z
         r["servicos"] += 1
@@ -289,15 +289,15 @@ def apuramento(db: Session, tenant_id: int, mes: date, hoje: date, supervisor_id
 
 
 def apuramento_csv(dados: dict) -> str:
-    """Ficheiro para o PHC: separador ';', decimais com vírgula, UTF-8 com BOM (abre bem no Excel)."""
+    """Ficheiro para o ERP: separador ';', decimais com vírgula, UTF-8 com BOM (abre bem no Excel)."""
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";", lineterminator="\r\n")
-    w.writerow(["Mes", "Numero", "Colaborador", "Tipo", "Cliente", "Cliente PHC", "Servicos", "Horas", "Valor hora", "Valor"])
+    w.writerow(["Mes", "Numero", "Colaborador", "Tipo", "Cliente", "Cliente ERP", "Servicos", "Horas", "Valor hora", "Valor"])
     fmt = lambda v: f"{v:.2f}".replace(".", ",")  # noqa: E731
     for d in dados["colaboradores"]:
         for ln in d["linhas"]:
             w.writerow([dados["mes"][:7], d["numero"], d["nome"], "Prestador" if d["prestador"] else "Trabalhador",
-                        ln["cliente"], ln["codigo_phc"] or "", ln["servicos"], fmt(ln["horas"]), fmt(ln["valor_hora"]), fmt(ln["valor"])])
+                        ln["cliente"], ln["codigo_erp"] or "", ln["servicos"], fmt(ln["horas"]), fmt(ln["valor_hora"]), fmt(ln["valor"])])
     return "﻿" + buf.getvalue()
 
 

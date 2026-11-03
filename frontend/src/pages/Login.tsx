@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, ErrorBox, Field, Icon } from '../components/ui'
+import { Button, ErrorBox, Field } from '../components/ui'
+import logo from '../assets/argos-logo.png'
 import { login } from '../lib/api'
 
 export default function Login() {
@@ -19,9 +20,9 @@ export default function Login() {
   return (
     <div className="min-h-screen grid place-items-center bg-bg p-6">
       <form onSubmit={submit} className="card w-full max-w-[400px] p-7 flex flex-col gap-4">
-        <div className="flex items-center gap-2.5 mb-2">
-          <div className="w-9 h-9 rounded-[10px] bg-amber-400 grid place-items-center text-petrol-900"><Icon name="cal" strokeWidth={2.2} /></div>
-          <div><div className="text-lg font-semibold leading-tight">Field Agency</div><div className="text-[12.5px] text-ink-60">Gestão operacional</div></div>
+        <div className="flex flex-col items-center gap-1 mb-2">
+          <img src={logo} alt="Argos" className="h-32 w-auto" />
+          <div className="text-[12.5px] text-ink-60">Gestão operacional de agências de field marketing</div>
         </div>
         <Field label="Email">{(id) => <input id={id} className="inp" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />}</Field>
         <Field label="Palavra-passe">{(id) => <input id={id} className="inp" type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} required />}</Field>

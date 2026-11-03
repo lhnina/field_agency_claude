@@ -98,7 +98,7 @@ export function NovoContrato({ onClose, onCriado, inicial }: { onClose: () => vo
           </select>)}</Field>
         <Field label="Marca">{(id) => (
           <select id={id} className="inp" value={f.marca_id} onChange={set('marca_id')} disabled={!cli}>
-            <option value="">—</option>{cli?.marcas.map((mm) => <option key={mm.id} value={mm.id}>{mm.nome}</option>)}
+            <option value="">—</option>{cli?.marcas.filter((mm) => mm.ativo !== false || String(mm.id) === f.marca_id).map((mm) => <option key={mm.id} value={mm.id}>{mm.nome}</option>)}
           </select>)}</Field>
         <Field label="Início">{(id) => <input id={id} type="date" className="inp" value={f.inicio} onChange={set('inicio')} />}</Field>
         <Field label="Fim" hint="Vazio = sem termo" error={fimErr}>{(id) => <input id={id} type="date" className={`inp ${fimErr ? 'inp-err' : ''}`} value={f.fim} onChange={set('fim')} />}</Field>

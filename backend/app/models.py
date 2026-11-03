@@ -66,7 +66,17 @@ class Cliente(TenantMixin, Base):
     id: Mapped[int] = IdCol()
     nome: Mapped[str] = mapped_column(String(160))
     nif: Mapped[str | None] = mapped_column(String(20))
-    codigo_phc: Mapped[int | None] = mapped_column(Integer)
+    codigo_erp: Mapped[int | None] = mapped_column(Integer)
+    morada: Mapped[str | None] = mapped_column(String(250))
+    codigo_postal: Mapped[str | None] = mapped_column(String(10))
+    localidade: Mapped[str | None] = mapped_column(String(80))
+    telefone: Mapped[str | None] = mapped_column(String(30))
+    email: Mapped[str | None] = mapped_column(String(160))
+    url: Mapped[str | None] = mapped_column(String(250))
+    contacto_nome: Mapped[str | None] = mapped_column(String(120))
+    gestor_conta: Mapped[str | None] = mapped_column(String(120))  # texto livre nesta fase
+    observacoes: Mapped[str | None] = mapped_column(Text)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     marcas: Mapped[list["Marca"]] = relationship(back_populates="cliente", cascade="all, delete-orphan")
 
 
@@ -75,6 +85,7 @@ class Marca(TenantMixin, Base):
     id: Mapped[int] = IdCol()
     cliente_id: Mapped[int] = mapped_column(ForeignKey("clientes.id", ondelete="CASCADE"), index=True)
     nome: Mapped[str] = mapped_column(String(160))
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     cliente: Mapped[Cliente] = relationship(back_populates="marcas")
 
 
@@ -82,12 +93,14 @@ class Insignia(TenantMixin, Base):
     __tablename__ = "insignias"
     id: Mapped[int] = IdCol()
     nome: Mapped[str] = mapped_column(String(120))
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
 
 class Zona(TenantMixin, Base):
     __tablename__ = "zonas"
     id: Mapped[int] = IdCol()
     nome: Mapped[str] = mapped_column(String(120))
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
 
 class Loja(TenantMixin, Base):
@@ -109,6 +122,7 @@ class Loja(TenantMixin, Base):
     contacto_funcao: Mapped[str | None] = mapped_column(String(80))
     contacto_email: Mapped[str | None] = mapped_column(String(160))
     contacto_telefone: Mapped[str | None] = mapped_column(String(30))
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
     insignia: Mapped[Insignia | None] = relationship()
     zona: Mapped[Zona | None] = relationship()
 

@@ -1,0 +1,76 @@
+from datetime import date
+
+from app.models import Cliente, EstadoContrato, Loja
+from app.services import importacao as imp
+from app.services import operacao as op
+from tests.conftest import nova_linha, token
+from tests.test_importacao import xlsx
+
+
+def test_cliente_ficha_completa_e_edicao(client, mundo):
+    mundo.db.commit()
+    h = token(client, "g@t.pt")
+    body = {"nome": "Doce Lar", "nif": "509000111", "codigo_erp": 1400, "morada": "Rua A, 1", "codigo_postal": "1000-001",
+            "localidade": "Lisboa", "telefone": "210000000", "email": "geral@docelar.pt", "url": "https://docelar.pt",
+            "contacto_nome": "Paulo Reis", "gestor_conta": "Hugo Faria", "observacoes": "Cliente novo", "marcas": ["Doce Lar"]}
+    r = client.post("/api/clientes", headers=h, json=body)
+    assert r.status_code == 201 and r.json()["gestor_conta"] == "Hugo Faria" and r.json()["ativo"]
+    cid = r.json()["id"]
+    assert client.post("/api/clientes", headers=h, json=body).status_code == 409
+    r = client.put(f"/api/clientes/{cid}", headers=h, json={**body, "telefone": "219999999", "marcas": ["Doce Lar", "Lar Kids"]})
+    assert r.json()["telefone"] == "219999999" and [m["nome"] for m in r.json()["marcas"]] == ["Doce Lar", "Lar Kids"]
+
+
+def test_desativar_cliente_bloqueado_com_contratos_e_reativar(client, mundo):
+    mundo.db.commit()
+    h = token(client, "g@t.pt")
+    cid = mundo.cliente.id
+    r = client.post(f"/api/clientes/{cid}/estado", headers=h, json={"ativo": False})
+    assert r.status_code == 422 and "contrato" in r.json()["detail"]
+    mundo.contrato.estado = EstadoContrato.terminado
+    mundo.db.commit()
+    assert client.post(f"/api/clientes/{cid}/estado", headers=h, json={"ativo": False}).json()["ativo"] is False
+    assert cid not in [c["id"] for c in client.get("/api/clientes", headers=h).json()]
+    assert cid in [c["id"] for c in client.get("/api/clientes", headers=h, params={"inativos": True}).json()]
+    assert mundo.db.get(Cliente, cid) is not None  # nunca é apagado
+    assert client.post(f"/api/clientes/{cid}/estado", headers=h, json={"ativo": True}).json()["ativo"] is True
+
+
+def test_desativar_loja_e_colaborador_bloqueados_em_uso(client, mundo):
+    ln = nova_linha(mundo, [2, 0, 0, 0, 0, 0, 0])
+    op.afetar(mundo.db, mundo.gestor, ln, mundo.ines, date(2026, 11, 2))
+    mundo.db.commit()
+    h = token(client, "g@t.pt")
+    r = client.post(f"/api/lojas/{mundo.loja.id}/estado", headers=h, json={"ativo": False})
+    assert r.status_code == 422 and "linha" in r.json()["detail"]
+    r = client.post(f"/api/colaboradores/{mundo.ines.id}/estado", headers=h, json={"ativo": False})
+    assert r.status_code == 422 and "afeto" in r.json()["detail"]
+    # sem uso: desativa e sai das listas
+    assert client.post(f"/api/lojas/{mundo.loja2.id}/estado", headers=h, json={"ativo": False}).json()["ativo"] is False
+    assert mundo.loja2.id not in [x["id"] for x in client.get("/api/lojas", headers=h).json()]
+    assert client.post(f"/api/colaboradores/{mundo.pedro.id}/estado", headers=h, json={"ativo": False}).status_code == 200
+    assert mundo.pedro.id not in [x["id"] for x in client.get("/api/colaboradores", headers=h).json()]
+    assert mundo.db.get(Loja, mundo.loja2.id) is not None
+
+
+def test_zonas_insignias_e_marcas_inativas(client, mundo):
+    mundo.db.commit()
+    h = token(client, "g@t.pt")
+    z = client.post("/api/zonas", headers=h, json={"nome": "Setúbal"}).json()
+    assert client.post("/api/zonas", headers=h, json={"nome": "setúbal"}).status_code == 409
+    assert client.put(f"/api/zonas/{z['id']}", headers=h, json={"nome": "Setúbal e Palmela"}).json()["nome"] == "Setúbal e Palmela"
+    client.post(f"/api/zonas/{z['id']}/estado", headers=h, json={"ativo": False})
+    assert z["id"] not in [x["id"] for x in client.get("/api/zonas", headers=h).json()]
+    assert z["id"] in [x["id"] for x in client.get("/api/zonas", headers=h, params={"inativos": True}).json()]
+    i = client.post("/api/insignias", headers=h, json={"nome": "Mercadona"}).json()
+    assert client.post(f"/api/insignias/{i['id']}/estado", headers=h, json={"ativo": False}).json()["ativo"] is False
+    c = client.post("/api/clientes", headers=h, json={"nome": "Marca Teste", "marcas": ["A", "B"]}).json()
+    mid = c["marcas"][0]["id"]
+    assert client.post(f"/api/marcas/{mid}/estado", headers=h, json={"ativo": False}).json()["ativo"] is False
+
+
+def test_importacao_aceita_cabecalho_antigo_codigo_phc(mundo):
+    conteudo = xlsx(["Nome", "Código PHC", "Gestor de conta"], [["Novo Cliente", 1500, "Hugo"]])
+    imp.importar(mundo.db, mundo.gestor, "clientes", conteudo, True)
+    c = mundo.db.query(Cliente).filter_by(nome="Novo Cliente").one()
+    assert c.codigo_erp == 1500 and c.gestor_conta == "Hugo"

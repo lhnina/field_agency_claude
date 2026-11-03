@@ -8,7 +8,7 @@ type Linha = { linha: number; chave: string; acao: string; erros: string[]; avis
 type Res = { linhas: Linha[]; resumo: { total: number; com_erros: number; criar?: number; atualizar?: number }; importado?: boolean }
 
 const PASSOS: { tipo: Tipo; titulo: string; texto: string }[] = [
-  { tipo: 'clientes', titulo: '1 · Clientes e marcas', texto: 'Nome, NIF, código PHC e marcas.' },
+  { tipo: 'clientes', titulo: '1 · Clientes e marcas', texto: 'Nome, NIF, código ERP, morada, contactos, gestor de conta e marcas.' },
   { tipo: 'lojas', titulo: '2 · Lojas', texto: 'Insígnia, zona, morada, horários, contacto e supervisor.' },
   { tipo: 'colaboradores', titulo: '3 · Colaboradores', texto: 'N.º, vínculo, zona, supervisor, custo/hora e disponibilidade.' },
   { tipo: 'contratos', titulo: '4 · Contratos', texto: 'Uma linha por loja, com as horas por dia, o preço e o colaborador afeto.' },

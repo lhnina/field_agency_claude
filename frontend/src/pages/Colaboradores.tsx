@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Avatar, Badge, Bar, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, useToast } from '../components/ui'
 import { api } from '../lib/api'
+import { BotaoEstado, MostrarInativos } from '../components/Estado'
 import { VINCULO, dataCurta, eur } from '../lib/format'
 import type { Colaborador, IdNome, Vinculo } from '../lib/types'
 
@@ -14,9 +15,10 @@ const SEGMENTOS: { value: string; label: string }[] = [
 export default function Colaboradores() {
   const [vinculo, setVinculo] = useState('')
   const [q, setQ] = useState('')
+  const [inativos, setInativos] = useState(false)
   const [sel, setSel] = useState<number | null>(null)
   const [edit, setEdit] = useState<Colaborador | 'novo' | null>(null)
-  const lista = useQuery({ queryKey: ['colaboradores', vinculo, q], queryFn: () => api<Colaborador[]>('/colaboradores', { params: { vinculo, q } }) })
+  const lista = useQuery({ queryKey: ['colaboradores', vinculo, q, inativos], queryFn: () => api<Colaborador[]>('/colaboradores', { params: { vinculo, q, inativos } }) })
   const sups = useQuery({ queryKey: ['supervisores'], queryFn: () => api<IdNome[]>('/utilizadores/supervisores') })
   const itens = lista.data ?? []
   const atual = itens.find((c) => c.id === sel) ?? itens[0]
@@ -24,7 +26,7 @@ export default function Colaboradores() {
 
   return (
     <>
-      <PageHeader crumb="Pessoas" title="Colaboradores" sub={`${itens.length} colaboradores ativos${vinculo ? ' neste segmento' : ''}`}>
+      <PageHeader crumb="Pessoas" title="Colaboradores" sub={`${itens.filter((c) => c.ativo).length} colaboradores ativos${vinculo ? ' neste segmento' : ''}`}>
         <Button variant="primary" icon="plus" onClick={() => setEdit('novo')}>Novo colaborador</Button>
       </PageHeader>
       <div className="flex flex-wrap items-start gap-4">
@@ -35,11 +37,12 @@ export default function Colaboradores() {
                 className={`h-10 px-3 text-[13.5px] -mb-px border-b-2 ${vinculo === s.value ? 'border-petrol-600 text-ink font-medium' : 'border-transparent text-ink-60 hover:text-ink'}`}>{s.label}</button>
             ))}
           </div>
-          <div className="px-3.5 py-3">
+          <div className="px-3.5 py-3 flex flex-wrap items-center gap-3">
             <label className="flex items-center gap-2 h-[34px] w-[280px] px-3 border border-line rounded-[9px] bg-[#F7F8F6] text-ink-60">
               <Icon name="search" size={16} />
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome ou n.º" aria-label="Pesquisar colaboradores" className="flex-1 min-w-0 bg-transparent outline-none text-[13.5px] text-ink" />
             </label>
+            <MostrarInativos value={inativos} onChange={setInativos} />
           </div>
           {lista.isLoading ? <Loading /> : lista.error ? <div className="p-4"><ErrorBox error={lista.error} /></div> : itens.length === 0 ? <Empty title="Sem colaboradores" /> : (
             <div className="overflow-x-auto">
@@ -47,11 +50,11 @@ export default function Colaboradores() {
                 <thead><tr><th>Colaborador</th><th>Vínculo</th><th>Disponibilidade</th><th>Supervisor</th><th className="text-right">Custo/hora</th></tr></thead>
                 <tbody>
                   {itens.map((c, i) => (
-                    <tr key={c.id} className={atual?.id === c.id ? '[&>td]:!bg-[#EAF4F2]' : ''}>
+                    <tr key={c.id} className={`${atual?.id === c.id ? '[&>td]:!bg-[#EAF4F2]' : ''} ${c.ativo ? '' : 'opacity-60'}`}>
                       <td>
                         <div className="flex items-center gap-2.5">
                           <Avatar nome={c.nome} tone={i} />
-                          <div><button type="button" onClick={() => setSel(c.id)} className="font-medium text-[13.5px] hover:text-petrol-600 hover:underline text-left">{c.nome}</button>
+                          <div><button type="button" onClick={() => setSel(c.id)} className="font-medium text-[13.5px] hover:text-petrol-600 hover:underline text-left">{c.nome}{!c.ativo && <span className="ml-2 align-middle"><Badge>Inativo</Badge></span>}</button>
                             <div className="text-xs text-ink-60">N.º {c.numero}{c.funcao ? ` · ${c.funcao}` : ''}{c.zona ? ` · ${c.zona.nome}` : ''}</div></div>
                         </div>
                       </td>
@@ -74,7 +77,7 @@ export default function Colaboradores() {
               <div className="flex-1 min-w-0">
                 <div className="text-[17px] font-semibold tracking-[-0.01em]">{atual.nome}</div>
                 <div className="text-[12.5px] text-ink-60">N.º {atual.numero}{atual.funcao ? ` · ${atual.funcao}` : ''}</div>
-                <div className="flex gap-1.5 mt-2"><Badge tone="ok" dot>Ativo</Badge><Badge tone={VINCULO[atual.vinculo].tone}>{VINCULO[atual.vinculo].label}</Badge></div>
+                <div className="flex gap-1.5 mt-2">{atual.ativo ? <Badge tone="ok" dot>Ativo</Badge> : <Badge dot>Inativo</Badge>}<Badge tone={VINCULO[atual.vinculo].tone}>{VINCULO[atual.vinculo].label}</Badge></div>
               </div>
               <Button size="sm" variant="primary" icon="edit" onClick={() => setEdit(atual)}>Editar</Button>
             </div>
@@ -89,6 +92,9 @@ export default function Colaboradores() {
             <div className="px-[18px] py-3.5 border-t border-line-soft">
               <div className="text-[13px] font-semibold mb-2">Disponibilidade semanal</div>
               <Disp d={atual.disponibilidade} big />
+            </div>
+            <div className="flex justify-end px-[18px] py-3 border-t border-line-soft">
+              <BotaoEstado url={`/colaboradores/${atual.id}/estado`} ativo={atual.ativo} nome={atual.nome} invalidar={['colaboradores']} />
             </div>
           </Card>
         )}
@@ -150,7 +156,7 @@ function ColabDialog({ c, onClose }: { c: Colaborador | null; onClose: () => voi
       method: c ? 'PUT' : 'POST',
       body: { ...f, funcao: f.funcao || null, email: f.email || null, telefone: f.telefone || null, data_inicio: f.data_inicio || null,
         zona_id: f.zona_id ? Number(f.zona_id) : null, supervisor_id: f.supervisor_id ? Number(f.supervisor_id) : null,
-        custo_hora: Number(String(f.custo_hora).replace(',', '.')) || 0, ativo: true },
+        custo_hora: Number(String(f.custo_hora).replace(',', '.')) || 0, ativo: c?.ativo ?? true },
     }),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['colaboradores'] }); toast(c ? 'Ficha atualizada' : 'Colaborador criado'); onClose() },
   })

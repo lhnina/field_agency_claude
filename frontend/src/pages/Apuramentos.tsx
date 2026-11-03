@@ -10,7 +10,7 @@ import type { Vinculo } from '../lib/types'
 type Ap = {
   mes: string; fechado: boolean
   colaboradores: { colaborador_id: number; numero: string; nome: string; vinculo: Vinculo; prestador: boolean; horas: number; valor: number; pendentes: number
-    linhas: { cliente: string; codigo_phc: number | null; valor_hora: number; horas: number; valor: number; tacitas: number; servicos: number }[] }[]
+    linhas: { cliente: string; codigo_erp: number | null; valor_hora: number; horas: number; valor: number; tacitas: number; servicos: number }[] }[]
   totais: { horas: number; valor: number; valor_trabalhadores: number; valor_prestadores: number; colaboradores: number; prestadores: number; pendentes: number }
 }
 
@@ -37,9 +37,9 @@ export default function Apuramentos() {
   return (
     <>
       <PageHeader crumb="Financeiro" title="Apuramento de remunerações"
-        sub="Horas validadas por colaborador e cliente, valorizadas ao custo/hora (ou ao custo especial da linha). Para processamento no PHC.">
+        sub="Horas validadas por colaborador e cliente, valorizadas ao custo/hora (ou ao custo especial da linha). Para processamento no ERP.">
         <MesInput value={mes} onChange={setMes} />
-        <Button icon="receipt" onClick={exportar} disabled={!d?.colaboradores.length}>Exportar para o PHC (CSV)</Button>
+        <Button icon="receipt" onClick={exportar} disabled={!d?.colaboradores.length}>Exportar para o ERP (CSV)</Button>
         {d && <FechoPeriodo tipo="remuneracao" mes={mes} fechado={d.fechado} onDone={() => qc.invalidateQueries({ queryKey: ['apuramento'] })}
           bloqueio={d.totais.pendentes ? `${d.totais.pendentes} serviços por validar` : null}
           descricao={`Fecha o apuramento de ${nomeMes(mes)}: ${horas(d.totais.horas)} e ${eur(d.totais.valor)}.`} />}
@@ -76,7 +76,7 @@ export default function Apuramentos() {
                       </tr>
                       {aberto.has(c.colaborador_id) && c.linhas.map((l, i) => (
                         <tr key={i} className="[&>td]:bg-[#FAFBF9]">
-                          <td className="!pl-[76px]">{l.cliente}<span className="block text-xs text-ink-60">{l.servicos} serviços{l.tacitas ? ` · ${l.tacitas} por aceitação tácita` : ''}{l.codigo_phc ? ` · PHC ${l.codigo_phc}` : ''}</span></td>
+                          <td className="!pl-[76px]">{l.cliente}<span className="block text-xs text-ink-60">{l.servicos} serviços{l.tacitas ? ` · ${l.tacitas} por aceitação tácita` : ''}{l.codigo_erp ? ` · ERP ${l.codigo_erp}` : ''}</span></td>
                           <td className="text-xs text-ink-60 num">{eur(l.valor_hora)}/h</td><td />
                           <td className="text-right num">{num(l.horas)}</td><td className="text-right num">{eur(l.valor)}</td><td />
                         </tr>

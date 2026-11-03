@@ -3,14 +3,18 @@ export type TipoContrato = 'REP' | 'PRO' | 'LOG' | 'EQF'
 export type EstadoContrato = 'proposta' | 'ativo' | 'suspenso' | 'terminado'
 export type Vinculo = 'sem_termo' | 'a_termo' | 'muito_curta_duracao' | 'recibos_verdes'
 
-export type Cliente = { id: number; nome: string; nif: string | null; codigo_phc: number | null; marcas: IdNome[] }
+export type Cliente = {
+  id: number; nome: string; nif: string | null; codigo_erp: number | null; morada: string | null; codigo_postal: string | null
+  localidade: string | null; telefone: string | null; email: string | null; url: string | null; contacto_nome: string | null
+  gestor_conta: string | null; observacoes: string | null; ativo: boolean; marcas: (IdNome & { ativo?: boolean })[]
+}
 
 export type Loja = {
   id: number; nome: string; insignia_id: number | null; zona_id: number | null; supervisor_id: number | null
   nome_credencial: string | null; morada: string | null; codigo_postal: string | null; localidade: string | null
   horario_semana: string | null; horario_fim_semana: string | null
   contacto_nome: string | null; contacto_funcao: string | null; contacto_email: string | null; contacto_telefone: string | null
-  insignia: IdNome | null; zona: IdNome | null
+  ativo: boolean; insignia: IdNome | null; zona: IdNome | null
 }
 
 export type Colaborador = {

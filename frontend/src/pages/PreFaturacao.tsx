@@ -9,7 +9,7 @@ type Tot = { horas_contratadas: number; valor: number; horas_executadas: number;
 type LinhaPF = { linha_id: number; loja: string; dias_vigencia: number; dias_mes: number; horas_semana: number; preco_hora: number; horas_contratadas: number; valor: number; horas_executadas: number; custo: number; margem: number; pendentes_validacao: number }
 type PF = {
   mes: string; area: string; fechado: boolean
-  clientes: { cliente_id: number; cliente: string; codigo_phc: number | null; totais: Tot; contratos: { id: number; numero: string; evento: string | null; descricao: string | null; totais: Tot; linhas: LinhaPF[] }[] }[]
+  clientes: { cliente_id: number; cliente: string; codigo_erp: number | null; totais: Tot; contratos: { id: number; numero: string; evento: string | null; descricao: string | null; totais: Tot; linhas: LinhaPF[] }[] }[]
   totais: Tot & { margem: number; margem_pct: number }
 }
 
@@ -48,7 +48,7 @@ export default function PreFaturacao() {
           )}
           <Card className="overflow-hidden">
             <div className="flex items-center gap-2 px-[18px] py-3 border-b border-line-soft text-[12.5px] text-ink-60">
-              <Icon name="receipt" size={16} />Nesta fase a pré-faturação é só para consulta. O envio para o PHC, como dossier interno BO/BI com detalhe por loja, chega numa fase seguinte.
+              <Icon name="receipt" size={16} />Nesta fase a pré-faturação é só para consulta. O envio para o ERP, como dossier interno BO/BI com detalhe por loja, chega numa fase seguinte.
             </div>
             {d.clientes.length === 0 ? <Empty title="Sem serviços a faturar neste mês" /> : (
               <div className="overflow-x-auto">
@@ -60,7 +60,7 @@ export default function PreFaturacao() {
                         <tr className="cursor-pointer [&>td]:bg-[#FAFBF9] [&>td]:font-medium" onClick={() => toggle(c.cliente_id)}>
                           <td><button type="button" aria-expanded={aberto.has(c.cliente_id)} className="flex items-center gap-2 font-semibold">
                             <Icon name={aberto.has(c.cliente_id) ? 'cd' : 'cr'} size={15} />{c.cliente}</button>
-                            <span className="text-xs text-ink-60 font-normal ml-6">{c.contratos.length} contrato{c.contratos.length > 1 ? 's' : ''}{c.codigo_phc ? ` · PHC ${c.codigo_phc}` : ''}</span></td>
+                            <span className="text-xs text-ink-60 font-normal ml-6">{c.contratos.length} contrato{c.contratos.length > 1 ? 's' : ''}{c.codigo_erp ? ` · ERP ${c.codigo_erp}` : ''}</span></td>
                           <td /><td />
                           <td className="text-right num">{num(c.totais.horas_contratadas)}</td><td />
                           <td className="text-right num font-semibold">{eur(c.totais.valor)}</td>

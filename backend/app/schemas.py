@@ -33,15 +33,35 @@ class IdNome(ORM):
     nome: str
 
 
+class IdNomeAtivo(ORM):
+    id: int
+    nome: str
+    ativo: bool
+
+
 class MarcaOut(ORM):
     id: int
     nome: str
+    ativo: bool = True
+
+
+class EstadoAtivoIn(BaseModel):
+    ativo: bool
 
 
 class ClienteIn(BaseModel):
     nome: str = Field(min_length=1, max_length=160)
     nif: str | None = None
-    codigo_phc: int | None = None
+    codigo_erp: int | None = None
+    morada: str | None = None
+    codigo_postal: str | None = None
+    localidade: str | None = None
+    telefone: str | None = None
+    email: str | None = None
+    url: str | None = None
+    contacto_nome: str | None = None
+    gestor_conta: str | None = None
+    observacoes: str | None = None
     marcas: list[str] = []
 
 
@@ -49,7 +69,17 @@ class ClienteOut(ORM):
     id: int
     nome: str
     nif: str | None
-    codigo_phc: int | None
+    codigo_erp: int | None
+    morada: str | None
+    codigo_postal: str | None
+    localidade: str | None
+    telefone: str | None
+    email: str | None
+    url: str | None
+    contacto_nome: str | None
+    gestor_conta: str | None
+    observacoes: str | None
+    ativo: bool
     marcas: list[MarcaOut]
 
 
@@ -74,6 +104,7 @@ class LojaIn(BaseModel):
 
 class LojaOut(LojaIn, ORM):
     id: int
+    ativo: bool
     insignia: IdNome | None = None
     zona: IdNome | None = None
 

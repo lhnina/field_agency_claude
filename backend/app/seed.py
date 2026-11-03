@@ -68,10 +68,12 @@ def run(reset: bool = True) -> None:
         lojas[nome] = lj
 
     clientes = {}
-    for nome, marcas, phc in [("Bom Grão Cafés", ["Bom Grão"], 1201), ("Atlântico Conservas", ["Atlântico", "Mar Azul"], 1188),
+    for nome, marcas, erp in [("Bom Grão Cafés", ["Bom Grão"], 1201), ("Atlântico Conservas", ["Atlântico", "Mar Azul"], 1188),
                               ("Nata Doce Gelados", ["Nata Doce"], 1310), ("Pura Higiene", ["Pura"], 1022),
                               ("Quinta do Vale Sumos", ["Quinta do Vale"], 1254), ("Montado Vinhos", ["Montado"], 1099)]:
-        c = Cliente(tenant_id=T, nome=nome, codigo_phc=phc, marcas=[Marca(tenant_id=T, nome=m) for m in marcas])
+        c = Cliente(tenant_id=T, nome=nome, codigo_erp=erp, marcas=[Marca(tenant_id=T, nome=m) for m in marcas],
+                    localidade="Lisboa", gestor_conta="Hugo Faria", contacto_nome="Departamento comercial",
+                    email="comercial@" + nome.split()[0].lower().replace("ã", "a").replace("â", "a") + ".pt")
         db.add(c)
         clientes[nome] = c
 

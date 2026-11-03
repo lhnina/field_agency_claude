@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.api.base import obter
 from app.db import get_db
-from app.models import Ausencia, Colaborador, EstadoOcorrencia, Ocorrencia, Perfil, User
-from app.schemas import AusenciaIn, AusenciaOut, ColaboradorIn, ColaboradorOut
+from app.models import Afetacao, Ausencia, Colaborador, EstadoOcorrencia, Ocorrencia, Perfil, User
+from app.schemas import AusenciaIn, AusenciaOut, ColaboradorIn, ColaboradorOut, EstadoAtivoIn
 from app.security import requer
 from app.services import operacao as op
 
@@ -21,10 +21,10 @@ def _scope(s, user: User):
 
 
 @router.get("/colaboradores", response_model=list[ColaboradorOut])
-def listar(q: str | None = None, vinculo: str | None = None, zona_id: int | None = None, ativos: bool = True,
+def listar(q: str | None = None, vinculo: str | None = None, zona_id: int | None = None, inativos: bool = False,
            user: User = Depends(requer("colaboradores.ler")), db: Session = Depends(get_db)):
     s = _scope(select(Colaborador).where(Colaborador.tenant_id == user.tenant_id), user)
-    if ativos:
+    if not inativos:
         s = s.where(Colaborador.ativo.is_(True))
     if q:
         s = s.where(or_(Colaborador.nome.ilike(f"%{q}%"), Colaborador.numero.ilike(f"%{q}%")))
@@ -32,7 +32,7 @@ def listar(q: str | None = None, vinculo: str | None = None, zona_id: int | None
         s = s.where(Colaborador.vinculo == vinculo)
     if zona_id:
         s = s.where(Colaborador.zona_id == zona_id)
-    return db.scalars(s.order_by(Colaborador.nome)).all()
+    return db.scalars(s.order_by(Colaborador.ativo.desc(), Colaborador.nome)).all()
 
 
 @router.get("/colaboradores/{cid}", response_model=ColaboradorOut)
@@ -61,6 +61,28 @@ def editar(cid: int, body: ColaboradorIn, user: User = Depends(requer("colaborad
     for k, v in body.model_dump().items():
         setattr(c, k, v)
     op.auditar(db, user, "colaborador", c.id, "editar", {"antes": antes, "depois": body.model_dump()})
+    db.commit()
+    db.refresh(c)
+    return c
+
+
+@router.post("/colaboradores/{cid}/estado", response_model=ColaboradorOut)
+def estado(cid: int, body: EstadoAtivoIn, user: User = Depends(requer("colaboradores.editar")), db: Session = Depends(get_db)):
+    """Desativar não apaga: o colaborador sai das listas e o histórico mantém-se."""
+    c = obter(db, Colaborador, cid, user)
+    if not body.ativo:
+        hoje = date.today()
+        afet = db.scalar(select(func.count(Afetacao.id)).where(
+            Afetacao.colaborador_id == c.id, or_(Afetacao.ate.is_(None), Afetacao.ate >= hoje))) or 0
+        futuras = db.scalar(select(func.count(Ocorrencia.id)).where(
+            Ocorrencia.colaborador_efetivo_id == c.id, Ocorrencia.data >= hoje,
+            Ocorrencia.estado.in_((EstadoOcorrencia.atribuido, EstadoOcorrencia.confirmado)))) or 0
+        if afet or futuras:
+            raise HTTPException(422, f"O colaborador está afeto a {afet} loja(s) e tem {futuras} substituição(ões) futura(s): "
+                                     "reafete-as antes de o desativar")
+    if c.ativo != body.ativo:
+        c.ativo = body.ativo
+        op.auditar(db, user, "colaborador", c.id, "reativar" if body.ativo else "desativar", None)
     db.commit()
     db.refresh(c)
     return c

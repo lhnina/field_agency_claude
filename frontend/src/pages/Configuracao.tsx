@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Card, CardHeader, ErrorBox, Field, Loading, PageHeader, Seg, useToast } from '../components/ui'
 import Utilizadores from './Utilizadores'
 import Feriados from './Feriados'
+import Tabelas from './Tabelas'
 import { api, session } from '../lib/api'
 import { eur } from '../lib/format'
 
@@ -76,13 +77,13 @@ function Parametros() {
 export default function Configuracao() {
   const gere = ['administrador', 'direcao'].includes(session.user()?.perfil ?? '')
   const [tab, setTab] = useState(gere ? 'utilizadores' : 'parametros')
-  const opts = [...(gere ? [{ value: 'utilizadores', label: 'Utilizadores' }] : []), { value: 'feriados', label: 'Feriados' }, { value: 'parametros', label: 'Parâmetros' }]
+  const opts = [...(gere ? [{ value: 'utilizadores', label: 'Utilizadores' }] : []), { value: 'feriados', label: 'Feriados' }, { value: 'tabelas', label: 'Zonas e insígnias' }, { value: 'parametros', label: 'Parâmetros' }]
   return (
     <>
       <PageHeader crumb="Configuração" title="Configuração da organização">
         <Seg label="Secção" value={tab} onChange={setTab} options={opts} />
       </PageHeader>
-      {tab === 'utilizadores' ? <Utilizadores /> : tab === 'feriados' ? <Feriados /> : <Parametros />}
+      {tab === 'utilizadores' ? <Utilizadores /> : tab === 'feriados' ? <Feriados /> : tab === 'tabelas' ? <Tabelas /> : <Parametros />}
     </>
   )
 }

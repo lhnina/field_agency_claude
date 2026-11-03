@@ -112,8 +112,13 @@ class Modelo:
 MODELOS: dict[str, Modelo] = {
     "clientes": Modelo("Clientes", [
         Coluna("Nome", True, "Bom Grão Cafés"), Coluna("NIF", False, "509123456"),
-        Coluna("Código PHC", False, 1201, "N.º de cliente no PHC"),
+        Coluna("Código ERP", False, 1201, "N.º de cliente no ERP"),
         Coluna("Marcas", False, "Bom Grão; Grão Gourmet", "Separadas por ponto e vírgula"),
+        Coluna("Morada", False, "Rua do Café, 10"), Coluna("Código postal", False, "1000-100"),
+        Coluna("Localidade", False, "Lisboa"), Coluna("Telefone", False, "210000000"),
+        Coluna("Email", False, "geral@bomgrao.pt"), Coluna("Site", False, "https://bomgrao.pt"),
+        Coluna("Contacto", False, "Paulo Reis"), Coluna("Gestor de conta", False, "Hugo Faria"),
+        Coluna("Observações", False, None),
     ], ["Se o cliente já existir (mesmo nome), é atualizado e as marcas novas são acrescentadas."]),
     "lojas": Modelo("Lojas", [
         Coluna("Nome", True, "Continente Amadora"), Coluna("Insígnia", False, "Continente"),
@@ -199,6 +204,8 @@ def ler_folha(conteudo: bytes, tipo: str) -> list[tuple[int, dict]]:
     except StopIteration:
         raise ValueError("A folha está vazia")
     nomes = {_norm(c.nome): c.nome for c in MODELOS[tipo].colunas}
+    if "codigo erp" in nomes:
+        nomes["codigo phc"] = nomes["codigo erp"]  # modelos antigos
     idx = {}
     for i, h in enumerate(cab):
         k = _norm(str(h or "").replace("*", ""))
@@ -296,10 +303,10 @@ def _clientes(ctx: Contexto, rows, gravar: bool) -> Resultado:
             erros.append("Cliente repetido no ficheiro")
         vistos.add(k)
         try:
-            phc = int(_dec(r.get("Código PHC"), "Código PHC")) if _txt(r.get("Código PHC")) else None
+            erp = int(_dec(r.get("Código ERP"), "Código ERP")) if _txt(r.get("Código ERP")) else None
         except (ValueError, TypeError) as e:
             erros.append(str(e))
-            phc = None
+            erp = None
         marcas = [m.strip() for m in re.split(r"[;\n]", _txt(r.get("Marcas")) or "") if m.strip()]
         c = existentes.get(k)
         res.linhas.append(_linha(n, nome, "atualizar" if c else "criar", erros))
@@ -309,7 +316,13 @@ def _clientes(ctx: Contexto, rows, gravar: bool) -> Resultado:
                 ctx.db.add(c)
                 existentes[k] = c
             c.nif = _txt(r.get("NIF")) or c.nif
-            c.codigo_phc = phc if phc is not None else c.codigo_phc
+            for col, attr in [("Morada", "morada"), ("Código postal", "codigo_postal"), ("Localidade", "localidade"),
+                              ("Telefone", "telefone"), ("Email", "email"), ("Site", "url"), ("Contacto", "contacto_nome"),
+                              ("Gestor de conta", "gestor_conta"), ("Observações", "observacoes")]:
+                v = _txt(r.get(col))
+                if v is not None:
+                    setattr(c, attr, v)
+            c.codigo_erp = erp if erp is not None else c.codigo_erp
             atuais = {_norm(m.nome) for m in c.marcas}
             for m in marcas:
                 if _norm(m) not in atuais:

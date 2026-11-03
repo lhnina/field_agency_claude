@@ -60,7 +60,7 @@ async function entrar(p, email) {
   } else {
     console.log('fecho indisponível:', await fechar.getAttribute('title'))
   }
-  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("Exportar para o PHC")')])
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("Exportar para o ERP")')])
   console.log('CSV:', dl.suggestedFilename())
 
   // depois do fecho, a validação desse mês fica bloqueada

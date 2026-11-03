@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { MinhaSenhaDialog } from '../pages/Utilizadores'
+import simbolo from '../assets/argos-simbolo.png'
 import { session } from '../lib/api'
 import { Avatar, Icon } from './ui'
 import type { IconName } from './ui'
@@ -42,9 +43,9 @@ export default function Layout() {
   return (
     <div className="flex flex-wrap min-h-screen">
       <nav aria-label="Menu principal" className="flex-[1_0_248px] max-w-sidebar bg-petrol-900 text-[#C9D6D3] flex flex-col px-3 pt-[18px] pb-3.5">
-        <div className="flex items-center gap-2.5 px-2 pb-3.5">
-          <div className="w-8 h-8 rounded-[9px] bg-amber-400 grid place-items-center text-petrol-900"><Icon name="cal" strokeWidth={2.2} /></div>
-          <div className="leading-tight"><div className="text-white text-[15px] font-semibold">Field Agency</div><div className="text-xs text-[#93AAA6]">Gestão operacional</div></div>
+        <div className="flex items-center gap-3 px-2 pb-3.5">
+          <div className="w-10 h-10 rounded-[10px] bg-[#F3F6F4] grid place-items-center flex-none"><img src={simbolo} alt="" className="w-8 h-8" /></div>
+          <div className="leading-tight"><div className="text-white text-[17px] font-bold tracking-[.14em]">ARGOS</div><div className="text-xs text-[#93AAA6]">Gestão operacional</div></div>
         </div>
         {GRUPOS.map((g, i) => (
           <div key={i} className="mt-3">
