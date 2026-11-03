@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AreaBadge, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, Seg, useToast } from '../components/ui'
+import { DataInput } from '../components/DataInput'
 import { api } from '../lib/api'
 import { addDays, diaMes, diaSemana, horas, iso, num } from '../lib/format'
 import type { TipoContrato } from '../lib/types'
@@ -55,8 +56,8 @@ export default function Validacao() {
       </PageHeader>
 
       <div className="flex flex-wrap items-end gap-3">
-        <Field label="De">{(id) => <input id={id} type="date" className="inp w-[160px]" value={inicio} onChange={(e) => setInicio(e.target.value)} />}</Field>
-        <Field label="Até">{(id) => <input id={id} type="date" className="inp w-[160px]" value={fim} max={iso(hoje)} onChange={(e) => setFim(e.target.value)} />}</Field>
+        <Field label="De">{(id) => <DataInput id={id} className="w-[160px]" value={inicio} max={fim || iso(hoje)} onChange={setInicio} />}</Field>
+        <Field label="Até">{(id) => <DataInput id={id} className="w-[160px]" value={fim} min={inicio} max={iso(hoje)} onChange={setFim} />}</Field>
         <label className="flex items-center gap-2 h-9 text-[13px]"><input type="checkbox" className="w-4 h-4 accent-petrol-600" checked={soDif} onChange={(e) => setSoDif(e.target.checked)} />Só com diferença face ao planeado</label>
         <span className="flex-1" />
         {q.data && <>

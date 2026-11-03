@@ -75,6 +75,20 @@ def _out(c: Contrato) -> ContratoOut:
                        linhas=[_linha_out(ln, hoje) for ln in c.linhas])
 
 
+def _fmt(d: date) -> str:
+    return d.strftime("%d/%m/%Y")
+
+
+def _validar_vigencia_linha(c: Contrato, inicio: date, fim: date | None) -> None:
+    """As linhas têm de ficar dentro da vigência do contrato."""
+    if inicio < c.inicio:
+        raise HTTPException(422, f"O início da loja não pode ser antes do início do contrato ({_fmt(c.inicio)})")
+    if c.fim and inicio > c.fim:
+        raise HTTPException(422, f"O início da loja não pode ser depois do fim do contrato ({_fmt(c.fim)})")
+    if fim and c.fim and fim > c.fim:
+        raise HTTPException(422, f"O fim da loja não pode ser depois do fim do contrato ({_fmt(c.fim)})")
+
+
 def _horizonte() -> date:
     return date.today() + timedelta(days=settings.horizonte_planeamento_dias)
 
@@ -130,6 +144,11 @@ def editar(cid: int, body: ContratoIn, user: User = Depends(requer("contratos.ed
     c = _carregar(db, cid, user)
     if body.tipo != c.tipo:
         raise HTTPException(422, "O tipo de contrato não pode ser alterado")
+    fora = [ln.loja.nome for ln in c.linhas
+            if ln.inicio < body.inicio or (body.fim and (ln.inicio > body.fim or (ln.fim and ln.fim > body.fim)))]
+    if fora:
+        raise HTTPException(422, "A nova vigência deixa de fora lojas do contrato: " + ", ".join(sorted(fora)) +
+                            ". Ajuste primeiro as datas dessas lojas.")
     antes = {k: getattr(c, k) for k in body.model_dump()}
     for k, v in body.model_dump().items():
         setattr(c, k, v)
@@ -163,8 +182,7 @@ def mudar_estado(cid: int, body: EstadoIn, user: User = Depends(requer("contrato
 def criar_linha(cid: int, body: LinhaIn, user: User = Depends(requer("contratos.editar")), db: Session = Depends(get_db)):
     c = _carregar(db, cid, user)
     obter(db, Loja, body.loja_id, user)
-    if body.inicio < c.inicio or (c.fim and body.inicio > c.fim):
-        raise HTTPException(422, "O início da linha tem de estar dentro da vigência do contrato")
+    _validar_vigencia_linha(c, body.inicio, body.fim)
     ln = LinhaContrato(tenant_id=user.tenant_id, **body.model_dump())
     c.linhas.append(ln)
     db.flush()
@@ -178,6 +196,7 @@ def criar_linha(cid: int, body: LinhaIn, user: User = Depends(requer("contratos.
 @router.put("/linhas/{lid}", response_model=ContratoOut)
 def editar_linha(lid: int, body: LinhaIn, user: User = Depends(requer("contratos.editar")), db: Session = Depends(get_db)):
     ln = obter(db, LinhaContrato, lid, user)
+    _validar_vigencia_linha(ln.contrato, body.inicio, body.fim)
     antes = {k: getattr(ln, k) for k in body.model_dump()}
     for k, v in body.model_dump().items():
         setattr(ln, k, v)

@@ -84,3 +84,26 @@ def test_colaboradores_carga_afetada_e_filtro_zona(client, mundo):
     assert len(af) == 2 and sum(x["horas_semana"] for x in af) == 6.0
     r = client.get("/api/planeamento", headers=h, params={"colaborador_id": mundo.ines.id, "inicio": hoje.isoformat()})
     assert [c["id"] for c in r.json()["colaboradores"]] == [mundo.ines.id]
+
+
+def test_linhas_dentro_da_vigencia_do_contrato(client, mundo):
+    from datetime import date as d_
+    mundo.contrato.inicio, mundo.contrato.fim = d_(2026, 11, 1), d_(2026, 12, 31)
+    mundo.db.commit()
+    h = token(client, "g@t.pt")
+    base = {"loja_id": mundo.loja.id, "preco_hora": 18, "h_seg": 2}
+    url = f"/api/contratos/{mundo.contrato.id}/linhas"
+    r = client.post(url, headers=h, json={**base, "inicio": "2026-10-15"})
+    assert r.status_code == 422 and "antes do início do contrato" in r.text
+    r = client.post(url, headers=h, json={**base, "inicio": "2026-11-02", "fim": "2027-01-15"})
+    assert r.status_code == 422 and "depois do fim do contrato" in r.text
+    r = client.post(url, headers=h, json={**base, "inicio": "2026-11-02", "fim": "2026-12-15"})
+    assert r.status_code == 201
+    lid = r.json()["linhas"][0]["id"]
+    r = client.put(f"/api/linhas/{lid}", headers=h, json={**base, "inicio": "2026-11-02", "fim": "2027-02-01"})
+    assert r.status_code == 422
+    # encurtar o contrato para antes do fim de uma loja é recusado
+    c = r = client.get(f"/api/contratos/{mundo.contrato.id}", headers=h).json()
+    body = {k: c[k] for k in ("tipo", "cliente_id", "marca_id", "descricao", "evento", "data", "inicio", "observacoes")}
+    r = client.put(f"/api/contratos/{mundo.contrato.id}", headers=h, json={**body, "fim": "2026-11-30"})
+    assert r.status_code == 422 and "Continente Amadora" in r.text

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Badge, Button, Card, ErrorBox, Field, IconButton, Loading, Modal, useToast } from '../components/ui'
+import { DataInput } from '../components/DataInput'
 import { api, session } from '../lib/api'
 import { dataCurta, diaSemana } from '../lib/format'
 import type { IdNome } from '../lib/types'
@@ -67,7 +68,7 @@ function NovoFeriado({ onClose }: { onClose: () => void }) {
     <Modal title="Novo feriado" onClose={onClose}
       footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" loading={m.isPending} disabled={!f.data || !f.nome} onClick={() => m.mutate()}>Criar</Button></>}>
       <div className="grid grid-cols-2 gap-3.5">
-        <Field label="Data">{(id) => <input id={id} type="date" className="inp" value={f.data} onChange={(e) => setF({ ...f, data: e.target.value })} />}</Field>
+        <Field label="Data">{(id) => <DataInput id={id} value={f.data} onChange={(v) => setF({ ...f, data: v })} />}</Field>
         <Field label="Aplica-se a" hint="Municipal: só as lojas da zona">{(id) => (
           <select id={id} className="inp" value={f.zona_id} onChange={(e) => setF({ ...f, zona_id: e.target.value })}>
             <option value="">Toda a agência</option>{zonas.data?.map((z) => <option key={z.id} value={z.id}>Zona {z.nome}</option>)}

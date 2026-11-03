@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { api, session } from '../lib/api'
 import { Badge, Button, ErrorBox, Modal, useToast } from './ui'
+import { MesSeletor } from './DataInput'
 
 const MESES = ['janeiro', 'fevereiro', 'março', 'abril', 'maio', 'junho', 'julho', 'agosto', 'setembro', 'outubro', 'novembro', 'dezembro']
 export const nomeMes = (m: string) => { const [y, mm] = m.split('-').map(Number); return `${MESES[mm - 1]} ${y}` }
@@ -10,10 +11,10 @@ export const mesAtual = () => { const d = new Date(); return `${d.getFullYear()}
 
 export function MesInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
   return (
-    <label className="inline-flex items-center gap-2 h-9 pl-3 pr-1 rounded-lg border border-line-strong bg-white text-[13px] text-ink-80">
+    <div className="inline-flex items-center gap-2 h-9 pl-3 pr-3 rounded-lg border border-line-strong bg-white text-[13px] text-ink-80">
       Mês
-      <input type="month" value={value} max={mesAtual()} onChange={(e) => e.target.value && onChange(e.target.value)} className="outline-none font-medium text-ink bg-transparent" />
-    </label>
+      <MesSeletor value={value} max={mesAtual()} onChange={onChange} />
+    </div>
   )
 }
 

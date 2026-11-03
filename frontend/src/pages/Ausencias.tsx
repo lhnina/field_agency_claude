@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Loading, Modal, PageHeader, useToast } from '../components/ui'
+import { DataInput } from '../components/DataInput'
 import { api } from '../lib/api'
 import { dataCurta, iso } from '../lib/format'
 import type { Ausencia, Colaborador } from '../lib/types'
@@ -61,8 +62,8 @@ function NovaAusencia({ onClose }: { onClose: () => void }) {
         <Field label="Colaborador" className="col-span-2">{(id) => <select id={id} className="inp" value={f.colaborador_id} onChange={(e) => setF({ ...f, colaborador_id: e.target.value })}><option value="">Escolher…</option>{colabs.data?.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}</select>}</Field>
         <Field label="Tipo">{(id) => <select id={id} className="inp" value={f.tipo} onChange={(e) => setF({ ...f, tipo: e.target.value })}>{Object.entries(TIPO).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>}</Field>
         <span />
-        <Field label="De">{(id) => <input id={id} type="date" className="inp" value={f.inicio} onChange={(e) => setF({ ...f, inicio: e.target.value })} />}</Field>
-        <Field label="Até" error={err}>{(id) => <input id={id} type="date" className={`inp ${err ? 'inp-err' : ''}`} value={f.fim} onChange={(e) => setF({ ...f, fim: e.target.value })} />}</Field>
+        <Field label="De">{(id) => <DataInput id={id} value={f.inicio} onChange={(v) => setF({ ...f, inicio: v })} />}</Field>
+        <Field label="Até" error={err}>{(id) => <DataInput id={id} invalid={!!err} value={f.fim} min={f.inicio || undefined} onChange={(v) => setF({ ...f, fim: v })} />}</Field>
         <Field label="Observações" className="col-span-2">{(id) => <input id={id} className="inp" value={f.observacoes} onChange={(e) => setF({ ...f, observacoes: e.target.value })} />}</Field>
       </div>
       {m.error ? <div className="mt-3"><ErrorBox error={m.error} /></div> : null}

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { LojaPicker } from '../components/LojaPicker'
 import { ColaboradorPicker } from '../components/ColaboradorPicker'
 import { AreaBadge, Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, useToast } from '../components/ui'
+import { DataInput } from '../components/DataInput'
 import { api } from '../lib/api'
 import { ESTADO_CONTRATO, dataCurta, eur, horas, iso, num } from '../lib/format'
 import { DIAS } from '../lib/types'
@@ -21,6 +22,7 @@ export default function ContratoDetalhe() {
   const [linhaEdit, setLinhaEdit] = useState<Linha | 'nova' | null>(null)
   const [afetar, setAfetar] = useState<Linha | null>(null)
   const [editar, setEditar] = useState(false)
+  const [verTerminadas, setVerTerminadas] = useState(false)
   const set = (c: Contrato) => { qc.setQueryData(['contrato', c.id], c); qc.invalidateQueries({ queryKey: ['contratos'] }); qc.invalidateQueries({ queryKey: ['planeamento'] }) }
   const estado = useMutation({
     mutationFn: (e: string) => api<Contrato>(`/contratos/${id}/estado`, { method: 'POST', body: { estado: e } }),
@@ -32,6 +34,10 @@ export default function ContratoDetalhe() {
   if (q.error || !q.data) return <ErrorBox error={q.error} />
   const c = q.data
   const est = ESTADO_CONTRATO[c.estado]
+  const hojeIso = iso(new Date())
+  const terminou = (ln: Linha) => ln.fim !== null && ln.fim < hojeIso
+  const terminadas = c.linhas.filter(terminou).length
+  const linhasVisiveis = verTerminadas ? c.linhas : c.linhas.filter((ln) => !terminou(ln))
 
   return (
     <>
@@ -76,9 +82,16 @@ export default function ContratoDetalhe() {
           <h3 className="text-[14.5px] font-semibold">Linhas por loja</h3>
           <span className="text-[12.5px] text-ink-60">as horas de cada dia são distribuídas pelo colaborador</span>
           <span className="flex-1" />
+          {terminadas > 0 && (
+            <label className="flex items-center gap-2 text-[13px] text-ink-80 whitespace-nowrap mr-2">
+              <input type="checkbox" className="w-4 h-4 accent-petrol-600" checked={verTerminadas} onChange={(e) => setVerTerminadas(e.target.checked)} />
+              Mostrar terminadas ({terminadas})
+            </label>
+          )}
           <Button size="sm" icon="plus" onClick={() => setLinhaEdit('nova')}>Adicionar loja</Button>
         </div>
-        {c.linhas.length === 0 ? <Empty title="Sem lojas neste contrato">Adicione as lojas com as horas por dia da semana e o preço por hora.</Empty> : (
+        {c.linhas.length === 0 ? <Empty title="Sem lojas neste contrato">Adicione as lojas com as horas por dia da semana e o preço por hora.</Empty>
+          : linhasVisiveis.length === 0 ? <Empty title="Todas as lojas deste contrato já terminaram">Marque «Mostrar terminadas» para as ver.</Empty> : (
           <div className="overflow-x-auto">
             <table className="tbl">
               <thead><tr>
@@ -86,10 +99,10 @@ export default function ContratoDetalhe() {
                 <th className="text-right">Total/sem</th><th className="text-right">Preço/h</th><th className="text-right">Valor mensal</th><th>Colaborador afeto</th><th>Vigência</th><th>Observações</th><th />
               </tr></thead>
               <tbody>
-                {c.linhas.map((ln, i) => {
-                  const inativa = ln.fim !== null && ln.fim < iso(new Date())
+                {linhasVisiveis.map((ln, i) => {
+                  const inativa = terminou(ln)
                   return (
-                    <tr key={ln.id} className={inativa ? 'opacity-60' : ''}>
+                    <tr key={ln.id} className={inativa ? '[&>td]:!bg-[#EEF0EC] text-ink-60' : ''} title={inativa ? `Terminada a ${dataCurta(ln.fim)}` : undefined}>
                       <td>
                         <button type="button" onClick={() => setLinhaEdit(ln)} className="font-medium text-left hover:underline hover:text-petrol-600">{ln.loja_nome}</button>
                         <div className="text-xs text-ink-60">{[ln.loja_insignia, ln.loja_zona].filter(Boolean).join(' · ')}</div>
@@ -110,9 +123,11 @@ export default function ContratoDetalhe() {
                             <Avatar nome={ln.afetacao_atual.colaborador_nome} tone={i} />
                             <span>{ln.afetacao_atual.colaborador_nome}<span className="block text-xs text-ink-60">desde {dataCurta(ln.afetacao_atual.desde)}{ln.afetacao_atual.ate ? ` até ${dataCurta(ln.afetacao_atual.ate)}` : ''}</span></span>
                           </button>
-                        ) : <Button size="sm" variant="secondary" onClick={() => setAfetar(ln)} className="!text-err-fg">Por atribuir · Afetar</Button>}
+                        ) : inativa ? <span className="text-ink-60">—</span>
+                          : <Button size="sm" variant="secondary" onClick={() => setAfetar(ln)} className="!text-err-fg">Por atribuir · Afetar</Button>}
                       </td>
-                      <td className="text-xs text-ink-60 num">{dataCurta(ln.inicio)}<br />{ln.fim ? dataCurta(ln.fim) : 'sem termo'}</td>
+                      <td className="text-xs text-ink-60 num whitespace-nowrap">{dataCurta(ln.inicio)}<br />{ln.fim ? dataCurta(ln.fim) : 'sem termo'}
+                        {inativa && <div className="mt-0.5"><Badge>Terminada</Badge></div>}</td>
                       <td className="text-xs text-ink-60 max-w-[200px]"><div className="line-clamp-2" title={ln.observacoes ?? undefined}>{ln.observacoes || '—'}</div></td>
                       <td className="text-right"><button type="button" aria-label={`Editar ${ln.loja_nome}`} onClick={() => setLinhaEdit(ln)} className="text-ink-60 hover:text-ink p-1"><Icon name="edit" size={16} /></button></td>
                     </tr>
@@ -145,6 +160,12 @@ function LinhaDialog({ contrato, linha, onClose, onSaved }: { contrato: Contrato
     mecanica: linha?.mecanica ?? '', custo_hora_especial: linha?.custo_hora_especial ?? '', observacoes: linha?.observacoes ?? '',
     h: DIAS.map((d) => (linha ? String(Number(linha[`h_${d}`]) || '') : '')),
   }))
+  const erroInicio = !f.inicio ? 'Indique a data de início'
+    : f.inicio < contrato.inicio ? `Não pode ser antes do início do contrato (${dataCurta(contrato.inicio)})`
+    : contrato.fim && f.inicio > contrato.fim ? `Não pode ser depois do fim do contrato (${dataCurta(contrato.fim)})` : null
+  const erroFim = !f.fim ? null
+    : f.inicio && f.fim < f.inicio ? 'O fim não pode ser antes do início'
+    : contrato.fim && f.fim > contrato.fim ? `Não pode ser depois do fim do contrato (${dataCurta(contrato.fim)})` : null
   const total = f.h.reduce((s, v) => s + (Number(v.replace(',', '.')) || 0), 0)
   const m = useMutation({
     mutationFn: () => {
@@ -160,7 +181,7 @@ function LinhaDialog({ contrato, linha, onClose, onSaved }: { contrato: Contrato
   })
   return (
     <Modal title={linha ? `Editar ${linha.loja_nome}` : 'Adicionar loja ao contrato'} onClose={onClose} width={640}
-      footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" loading={m.isPending} disabled={!f.loja || total === 0} onClick={() => m.mutate()}>Guardar</Button></>}>
+      footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" loading={m.isPending} disabled={!f.loja || total === 0 || !!erroInicio || !!erroFim} onClick={() => m.mutate()}>Guardar</Button></>}>
       <div className="grid grid-cols-2 gap-3.5">
         <Field label="Loja" className="col-span-2">{(id) => (
           <LojaPicker id={id} value={f.loja} usadas={new Set(contrato.linhas.map((l) => l.loja_id))}
@@ -179,8 +200,9 @@ function LinhaDialog({ contrato, linha, onClose, onSaved }: { contrato: Contrato
         </div>
         <Field label="Preço por hora (€)">{(id) => <input id={id} inputMode="decimal" className="inp num" value={f.preco_hora} onChange={(e) => setF({ ...f, preco_hora: e.target.value })} />}</Field>
         <Field label="Custo Fixo (€/h)" hint="Vazio = custo do colaborador">{(id) => <input id={id} inputMode="decimal" className="inp num" value={f.custo_hora_especial} onChange={(e) => setF({ ...f, custo_hora_especial: e.target.value })} />}</Field>
-        <Field label="Início">{(id) => <input id={id} type="date" className="inp" value={f.inicio} onChange={(e) => setF({ ...f, inicio: e.target.value })} />}</Field>
-        <Field label="Fim" hint="Vazio = até ao fim do contrato">{(id) => <input id={id} type="date" className="inp" value={f.fim} onChange={(e) => setF({ ...f, fim: e.target.value })} />}</Field>
+        <Field label="Início" error={erroInicio}>{(id) => <DataInput id={id} invalid={!!erroInicio} value={f.inicio} min={contrato.inicio} max={contrato.fim ?? undefined} onChange={(v) => setF({ ...f, inicio: v })} />}</Field>
+        <Field label="Fim" error={erroFim} hint={erroFim ? undefined : contrato.fim ? `Vazio = até ao fim do contrato (${dataCurta(contrato.fim)})` : 'Vazio = sem termo, como o contrato'}>{(id) => <DataInput id={id} limpar invalid={!!erroFim} value={f.fim} min={f.inicio || contrato.inicio} max={contrato.fim ?? undefined} onChange={(v) => setF({ ...f, fim: v })} />}</Field>
+        <p className="col-span-2 -mt-1.5 text-xs text-ink-60">Vigência do contrato: {dataCurta(contrato.inicio)} a {contrato.fim ? dataCurta(contrato.fim) : 'sem termo'}. As datas da loja têm de ficar dentro desta vigência.</p>
         {pro && <>
           <Field label="Hora de início">{(id) => <input id={id} type="time" className="inp" value={f.hora_inicio} onChange={(e) => setF({ ...f, hora_inicio: e.target.value })} />}</Field>
           <Field label="Mecânica">{(id) => (
@@ -219,8 +241,8 @@ function AfetarDialog({ linha, onClose, onSaved }: { linha: Linha; onClose: () =
         <Field label="Colaborador" className="col-span-2">{(id) => (
           <ColaboradorPicker id={id} value={colab} zonaPreferida={linha.loja_zona}
             onChange={(c) => setColab(c ? { id: c.id, nome: c.nome } : null)} />)}</Field>
-        <Field label="A partir de">{(id) => <input id={id} type="date" className="inp" value={desde} onChange={(e) => setDesde(e.target.value)} />}</Field>
-        <Field label="Até" hint="Vazio = até ao fim do contrato">{(id) => <input id={id} type="date" className="inp" value={ate} onChange={(e) => setAte(e.target.value)} />}</Field>
+        <Field label="A partir de">{(id) => <DataInput id={id} value={desde} min={linha.inicio} max={linha.fim ?? undefined} onChange={setDesde} />}</Field>
+        <Field label="Até" hint="Vazio = até ao fim do contrato">{(id) => <DataInput id={id} limpar value={ate} min={desde || undefined} max={linha.fim ?? undefined} onChange={setAte} />}</Field>
       </div>
       {linha.afetacoes.length > 0 && (
         <div className="mt-4">

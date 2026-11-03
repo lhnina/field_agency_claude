@@ -141,6 +141,7 @@ def run(reset: bool = True) -> None:
     linha(bg, "Pingo Doce Benfica", [2, 0, 2, 0, 0, 0, 0], colab="Pedro Almeida")
     linha(bg, "Continente Sintra", [0, 3, 0, 3, 0, 0, 0], colab="Rita Gonçalves")
     linha(bg, "Auchan Alfragide", [0, 0, 0, 0, 3, 0, 0], colab="Inês Carvalho")
+    linha(bg, "Pingo Doce Telheiras", [2, 0, 0, 0, 2, 0, 0], colab="Pedro Almeida", fim=date(2026, 6, 30))  # já terminou
 
     at = contrato(TipoContrato.REP, "Atlântico Conservas", 2026, date(2026, 3, 1), date(2027, 2, 28), descricao="Reposição em 38 lojas")
     linha(at, "Continente Colombo", [4, 4, 4, 4, 4, 0, 0], preco="18.00", colab="Pedro Almeida")

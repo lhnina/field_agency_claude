@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AreaBadge, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, Seg, useToast } from '../components/ui'
+import { DataInput } from '../components/DataInput'
 import { api } from '../lib/api'
 import { ESTADO_CONTRATO, dataCurta, eur, horas, iso } from '../lib/format'
 import type { Cliente, Contrato, ContratoResumo, TipoContrato } from '../lib/types'
@@ -91,7 +92,7 @@ export function NovoContrato({ onClose, onCriado, inicial }: { onClose: () => vo
             <option value="REP">Reposição</option><option value="PRO">Promoção / ativação</option>
             <option value="LOG" disabled>Logística (próximo incremento)</option><option value="EQF" disabled>Equipas Fixas (próximo incremento)</option>
           </select>)}</Field>
-        <Field label="Data do contrato">{(id) => <input id={id} type="date" className="inp" value={f.data} onChange={set('data')} />}</Field>
+        <Field label="Data do contrato">{(id) => <DataInput id={id} value={f.data} onChange={(v) => setF({ ...f, data: v })} />}</Field>
         <Field label="Cliente">{(id) => (
           <select id={id} className="inp" value={f.cliente_id} onChange={(e) => setF({ ...f, cliente_id: e.target.value, marca_id: '' })}>
             <option value="">Escolher…</option>{clientes.data?.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
@@ -100,8 +101,8 @@ export function NovoContrato({ onClose, onCriado, inicial }: { onClose: () => vo
           <select id={id} className="inp" value={f.marca_id} onChange={set('marca_id')} disabled={!cli}>
             <option value="">—</option>{cli?.marcas.filter((mm) => mm.ativo !== false || String(mm.id) === f.marca_id).map((mm) => <option key={mm.id} value={mm.id}>{mm.nome}</option>)}
           </select>)}</Field>
-        <Field label="Início">{(id) => <input id={id} type="date" className="inp" value={f.inicio} onChange={set('inicio')} />}</Field>
-        <Field label="Fim" hint="Vazio = sem termo" error={fimErr}>{(id) => <input id={id} type="date" className={`inp ${fimErr ? 'inp-err' : ''}`} value={f.fim} onChange={set('fim')} />}</Field>
+        <Field label="Início">{(id) => <DataInput id={id} value={f.inicio} onChange={(v) => setF({ ...f, inicio: v })} />}</Field>
+        <Field label="Fim" hint="Vazio = sem termo" error={fimErr}>{(id) => <DataInput id={id} limpar invalid={!!fimErr} value={f.fim} min={f.inicio || undefined} onChange={(v) => setF({ ...f, fim: v })} />}</Field>
         {f.tipo === 'PRO'
           ? <Field label="Evento / campanha" className="col-span-2">{(id) => <input id={id} className="inp" value={f.evento} onChange={set('evento')} placeholder="Ex.: Campanha de Natal" />}</Field>
           : <Field label="Descrição" className="col-span-2">{(id) => <input id={id} className="inp" value={f.descricao} onChange={set('descricao')} placeholder="Ex.: Reposição em lojas da Grande Lisboa" />}</Field>}
