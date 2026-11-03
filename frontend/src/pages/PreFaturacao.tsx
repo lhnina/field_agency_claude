@@ -27,13 +27,15 @@ export default function PreFaturacao() {
   return (
     <>
       <PageHeader crumb="Financeiro" title="Pré-faturação"
-        sub={area === 'REP' ? 'Reposição: faturada pelas horas contratadas (h/semana × 52 ÷ 12 × preço), em proporção dos dias de vigência no mês. As lojas sem colaborador também são faturadas.' : 'Promoções: faturadas pelas horas planeadas da campanha no mês. As lojas sem colaborador também são faturadas.'}>
-        <Seg label="Área" value={area} onChange={setArea} options={[{ value: 'REP', label: 'Reposição' }, { value: 'PRO', label: 'Promoções' }]} />
+        sub={area === 'REP' ? 'Reposição: faturada pelas horas contratadas (h/semana × 52 ÷ 12 × preço), em proporção dos dias de vigência no mês. As lojas sem colaborador também são faturadas.'
+          : area === 'LOG' ? 'Logística: faturada pelo preço de cada serviço executado no mês. Os serviços por executar aparecem para controlo, sem valor.'
+          : 'Promoções: faturadas pelas horas planeadas da campanha no mês. As lojas sem colaborador também são faturadas.'}>
+        <Seg label="Área" value={area} onChange={setArea} options={[{ value: 'REP', label: 'Reposição' }, { value: 'PRO', label: 'Promoções' }, { value: 'LOG', label: 'Logística' }]} />
         <MesInput value={mes} onChange={setMes} />
         {d && <FechoPeriodo tipo="faturacao" mes={mes} area={area} fechado={d.fechado} onDone={() => qc.invalidateQueries({ queryKey: ['prefaturacao'] })}
-          descricao={`Fecha a pré-faturação de ${area === 'REP' ? 'Reposição' : 'Promoções'} de ${nomeMes(mes)} com ${eur(d.totais.valor ?? 0)}.`} />}
+          descricao={`Fecha a pré-faturação de ${area === 'REP' ? 'Reposição' : area === 'LOG' ? 'Logística' : 'Promoções'} de ${nomeMes(mes)} com ${eur(d.totais.valor ?? 0)}.`} />}
       </PageHeader>
-      {q.isLoading ? <Card><Loading /></Card> : q.error || !d ? <ErrorBox error={q.error} /> : (
+      {q.isLoading ? <Card><Loading /></Card> : q.error || !d ? <ErrorBox error={q.error} /> : area === 'LOG' ? <PreFatLog d={d as unknown as PFLog} mes={mes} /> : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <Kpi label={`A faturar · ${nomeMes(mes)}`} value={eur(d.totais.valor ?? 0)} sub={`${d.clientes.length} clientes`} />
@@ -111,4 +113,77 @@ export default function PreFaturacao() {
 
 function Margem({ v }: { v: number }) {
   return <span className={`font-medium ${v < 15 ? 'text-err-fg' : v < 20 ? 'text-warn-fg' : 'text-ok-fg'}`}>{num(v)} %</span>
+}
+
+// ------------------------------------------------------------------ logística
+type LinhaLog = { linha_id: number; loja: string; data: string; tipo: string; estado: string; referencia_erp: string | null; preco: number; valor: number; custo: number; margem: number; km: number }
+type TotLog = { valor: number; custo: number; km: number; pendentes: number; por_executar: number }
+type PFLog = { clientes: { cliente_id: number; cliente: string; codigo_erp: number | null; totais: TotLog; contratos: { id: number; numero: string; descricao: string | null; totais: TotLog; linhas: LinhaLog[] }[] }[]; totais: TotLog & { margem: number; margem_pct: number } }
+const ESTADO_PF: Record<string, { label: string; tone: 'ok' | 'warn' | 'err' | 'info' }> = {
+  validado: { label: 'Validado', tone: 'ok' }, executado: { label: 'Por validar', tone: 'warn' }, atribuido: { label: 'Por executar', tone: 'info' }, planeado: { label: 'Por atribuir', tone: 'err' },
+}
+
+function PreFatLog({ d, mes }: { d: PFLog; mes: string }) {
+  const t = d.totais
+  return (
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <Kpi label={`A faturar · ${nomeMes(mes)}`} value={eur(t.valor ?? 0)} sub={`${d.clientes.length} clientes`} />
+        <Kpi label="Por executar ou validar" value={`${(t.por_executar ?? 0) + (t.pendentes ?? 0)}`} sub={`${t.por_executar ?? 0} por executar · ${t.pendentes ?? 0} por validar`} />
+        <Kpi label="Custo de transporte e mão de obra" value={eur(t.custo ?? 0)} sub={`${num(t.km ?? 0, 0)} km`} />
+        <Kpi label="Margem bruta" value={<span className={t.margem_pct < 20 ? 'text-warn-fg' : 'text-ok-fg'}>{num(t.margem_pct ?? 0)} %</span>} sub={eur(t.margem ?? 0)} />
+      </div>
+      {((t.por_executar ?? 0) + (t.pendentes ?? 0)) > 0 && (
+        <div className="rounded-lg bg-warn-bg text-[#6B4000] px-3.5 py-2.5 text-[13px] flex items-center gap-2">
+          <Icon name="alert" size={16} />Há serviços deste mês por registar ou por validar: só passam a faturar depois de executados, e o mês só fecha com todos validados.
+        </div>
+      )}
+      <Card className="overflow-hidden">
+        {d.clientes.length === 0 ? <Empty title="Sem serviços de logística neste mês" /> : (
+          <div className="overflow-x-auto">
+            <table className="tbl">
+              <thead><tr><th>Cliente · contrato · serviço</th><th>Data</th><th>Estado</th><th>Ref. ERP</th><th className="text-right">Preço</th><th className="text-right">A faturar</th><th className="text-right">Km</th><th className="text-right">Custo</th><th className="text-right">Margem</th></tr></thead>
+              <tbody>{d.clientes.map((c) => (
+                <Fragment key={c.cliente_id}>
+                  <tr className="[&>td]:bg-[#FAFBF9] [&>td]:font-medium">
+                    <td className="font-semibold">{c.cliente}<span className="text-xs text-ink-60 font-normal ml-2">{c.codigo_erp ? `ERP ${c.codigo_erp}` : ''}</span></td>
+                    <td /><td /><td /><td />
+                    <td className="text-right num font-semibold">{eur(c.totais.valor)}</td>
+                    <td className="text-right num">{num(c.totais.km, 0)}</td>
+                    <td className="text-right num">{eur(c.totais.custo)}</td>
+                    <td className="text-right num"><Margem v={pct(c.totais.valor, c.totais.custo)} /></td>
+                  </tr>
+                  {c.contratos.map((ct) => (
+                    <Fragment key={ct.id}>
+                      <tr><td colSpan={9} className="!py-1.5 !pl-6 text-xs text-ink-60"><span className="font-mono">{ct.numero}</span>{ct.descricao ? ` · ${ct.descricao}` : ''}</td></tr>
+                      {ct.linhas.map((l) => (
+                        <tr key={l.linha_id}>
+                          <td className="!pl-9">{l.tipo} · {l.loja}</td>
+                          <td className="num text-[12.5px]">{l.data.split('-').reverse().join('/')}</td>
+                          <td><Badge tone={ESTADO_PF[l.estado]?.tone ?? 'info'} dot>{ESTADO_PF[l.estado]?.label ?? l.estado}</Badge></td>
+                          <td className="text-[12.5px] text-ink-60">{l.referencia_erp ?? '—'}</td>
+                          <td className="text-right num text-ink-60">{eur(l.preco)}</td>
+                          <td className="text-right num">{eur(l.valor)}</td>
+                          <td className="text-right num">{l.km ? num(l.km, 0) : '—'}</td>
+                          <td className="text-right num">{l.custo ? eur(l.custo) : '—'}</td>
+                          <td className="text-right num">{l.valor ? <Margem v={pct(l.valor, l.custo)} /> : '—'}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
+                </Fragment>
+              ))}</tbody>
+              <tfoot><tr className="[&>td]:border-t [&>td]:border-line [&>td]:font-semibold">
+                <td className="px-3 py-3">Total</td><td /><td /><td /><td />
+                <td className="text-right num px-3">{eur(t.valor ?? 0)}</td>
+                <td className="text-right num px-3">{num(t.km ?? 0, 0)}</td>
+                <td className="text-right num px-3">{eur(t.custo ?? 0)}</td>
+                <td className="text-right num px-3"><Margem v={t.margem_pct ?? 0} /></td>
+              </tr></tfoot>
+            </table>
+          </div>
+        )}
+      </Card>
+    </>
+  )
 }

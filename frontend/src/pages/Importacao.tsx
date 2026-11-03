@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AcaoIcone, Badge, Button, Card, ErrorBox, Icon, PageHeader, Spinner, useToast } from '../components/ui'
 import { ApiError, api, session } from '../lib/api'
 
-type Tipo = 'clientes' | 'lojas' | 'colaboradores' | 'contratos'
+type Tipo = 'clientes' | 'lojas' | 'colaboradores' | 'contratos' | 'logistica'
 type Linha = { linha: number; chave: string; acao: string; erros: string[]; avisos: string[] }
 type Res = { linhas: Linha[]; resumo: { total: number; com_erros: number; criar?: number; atualizar?: number }; importado?: boolean }
 
@@ -12,6 +12,7 @@ const PASSOS: { tipo: Tipo; titulo: string; texto: string }[] = [
   { tipo: 'lojas', titulo: '2 · Lojas', texto: 'Insígnia, zona, morada, horários, contacto e supervisor.' },
   { tipo: 'colaboradores', titulo: '3 · Colaboradores', texto: 'N.º, vínculo, zona, supervisor, custo/hora e disponibilidade.' },
   { tipo: 'contratos', titulo: '4 · Contratos', texto: 'Uma linha por loja, com as horas por dia, o preço e o colaborador afeto.' },
+  { tipo: 'logistica', titulo: '5 · Pedidos de logística', texto: 'Pedidos do ERP: contrato de Logística, loja, serviço, data, janela, materiais e preço.' },
 ]
 
 async function enviar(tipo: Tipo, f: File, confirmar: boolean): Promise<Res> {
@@ -63,7 +64,7 @@ export default function Importacao() {
     <>
       <PageHeader crumb="Configuração" title="Importação de dados"
         sub="Carga inicial a partir de Excel. Importe pela ordem indicada: os contratos usam os clientes, as lojas e os colaboradores já importados." />
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4">
         {PASSOS.map((p) => (
           <button key={p.tipo} type="button" onClick={() => escolher(p.tipo)} aria-pressed={tipo === p.tipo}
             className={`card text-left px-[18px] py-4 transition-colors ${tipo === p.tipo ? '!border-petrol-600 ring-2 ring-petrol-600/15' : 'hover:border-line-strong'}`}>

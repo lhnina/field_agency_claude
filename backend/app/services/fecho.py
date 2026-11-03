@@ -158,6 +158,19 @@ def _colabs(db: Session, tenant_id: int) -> dict[int, Colaborador]:
 def prefaturacao(db: Session, tenant_id: int, mes: date, area: str, hoje: date, clientes: set[int] | None = None) -> dict:
     mes = inicio_mes(mes)
     fim = proximo_mes(mes)
+    if area == TipoContrato.LOG.value:
+        from app.services import logistica as lg
+        lista = lg.prefaturacao(db, tenant_id, mes, fim, hoje, clientes)
+        tot = defaultdict(float)
+        for cl in lista:
+            for k, v in cl["totais"].items():
+                tot[k] += v
+        totais = dict(tot)
+        totais["margem"] = tot["valor"] - tot["custo"]
+        totais["margem_pct"] = (tot["valor"] - tot["custo"]) / tot["valor"] * 100 if tot["valor"] else 0.0
+        p = periodo(db, tenant_id, TipoPeriodo.faturacao, mes, area)
+        return {"mes": mes.isoformat(), "area": area, "fechado": p is not None,
+                "fechado_em": p.created_at.isoformat() if p else None, "clientes": lista, "totais": totais}
     dias_mes = monthrange(mes.year, mes.month)[1]
     colabs = _colabs(db, tenant_id)
     tenant = db.get(Tenant, tenant_id)
@@ -257,6 +270,28 @@ def apuramento(db: Session, tenant_id: int, mes: date, hoje: date, supervisor_id
         r["servicos"] += 1
         if o.origem_execucao == OrigemExecucao.tacita:
             r["tacitas"] += 1
+    # Logística: horas de execução validadas do motorista e do ajudante
+    from app.models import EstadoServicoLog, ServicoLogistico
+    from app.services import logistica as lg
+    qs = select(ServicoLogistico).options(joinedload(ServicoLogistico.contrato).joinedload(Contrato.cliente)).where(
+        ServicoLogistico.tenant_id == tenant_id, ServicoLogistico.data >= mes, ServicoLogistico.data < proximo_mes(mes),
+        ServicoLogistico.estado != EstadoServicoLog.cancelado)
+    if clientes is not None:
+        qs = qs.join(Contrato, ServicoLogistico.contrato_id == Contrato.id).where(Contrato.cliente_id.in_(clientes))
+    for s in db.scalars(qs).unique().all():
+        for cid in (s.colaborador_id, s.ajudante_id):
+            if not cid or (supervisor_id and colabs[cid].supervisor_id != supervisor_id):
+                continue
+            if s.estado != EstadoServicoLog.validado:
+                if s.data <= hoje:
+                    pend_por_colab[cid] += 1
+                continue
+            cli = s.contrato.cliente
+            vh = colabs[cid].custo_hora or Z
+            r = linhas.setdefault((cid, cli.id, vh), {"cliente_id": cli.id, "cliente": cli.nome, "codigo_erp": cli.codigo_erp,
+                                                      "valor_hora": vh, "horas": Z, "tacitas": 0, "servicos": 0})
+            r["horas"] += lg.horas_execucao(s)
+            r["servicos"] += 1
     por_colab: dict[int, dict] = {}
     for (cid, _, _), r in linhas.items():
         c = colabs[cid]
@@ -320,6 +355,9 @@ def fechar(db: Session, user: User, tipo: TipoPeriodo, mes: date, area: str, hoj
     else:
         dados = prefaturacao(db, user.tenant_id, mes, area, hoje)
         resumo = dados["totais"]
+        if area == TipoContrato.LOG.value and (resumo.get("pendentes") or resumo.get("por_executar")):
+            raise ValueError(f"Há serviços de logística deste mês por registar ({int(resumo.get('por_executar', 0))}) "
+                             f"ou por validar ({int(resumo.get('pendentes', 0))})")
     p = PeriodoFechado(tenant_id=user.tenant_id, tipo=tipo, area=area, mes=mes, fechado_por_id=user.id,
                        resumo=json.dumps(resumo, default=str))
     db.add(p)

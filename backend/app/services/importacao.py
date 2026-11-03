@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import (
-    Cliente, Colaborador, Contrato, EstadoContrato, Insignia, LinhaContrato, Loja, Marca, Perfil, TipoContrato,
+    Cliente, Colaborador, Contrato, EstadoContrato, Insignia, LinhaContrato, Loja, Marca, Perfil, ServicoLogistico, TipoContrato,
     TipoVinculo, User, Zona,
 )
 from app.services import operacao as op
@@ -157,6 +157,17 @@ MODELOS: dict[str, Modelo] = {
         Coluna("Estado", False, "Ativo", lista=["Ativo", "Proposta"]),
     ], ["Uma linha por loja; as linhas com a mesma Referência formam um contrato.",
         "Os contratos são sempre criados de novo, com numeração automática. Contratos ativos geram logo o planeamento."]),
+    "logistica": Modelo("Pedidos de logística", [
+        Coluna("Referência ERP", False, "GT-2026/1532", "N.º do pedido/guia no ERP. Se já existir, o serviço é atualizado"),
+        Coluna("Contrato", True, "CT-LOG-2026/0001", "N.º de um contrato de Logística existente"),
+        Coluna("Loja", True, "Continente Amadora", "Nome ou código ERP da loja"),
+        Coluna("Serviço", True, "Entrega", lista=["Entrega", "Recolha", "Implementação", "Entrega + Implementação", "Desmontagem"]),
+        Coluna("Data", True, "15/11/2026"), Coluna("Hora início", False, "09:00", "Janela horária (hh:mm)"),
+        Coluna("Hora fim", False, "12:00"), Coluna("Origem", False, "Armazém Alverca"),
+        Coluna("Materiais", False, "2 expositores de chão; 50 cartazes A2"),
+        Coluna("Preço", False, 85.00, "€ por serviço"), Coluna("Observações", False, None),
+    ], ["Uma linha por serviço. Com «Referência ERP» o mesmo pedido pode ser carregado várias vezes: atualiza em vez de duplicar.",
+        "Serviços já executados ou validados não são alterados."]),
 }
 
 
@@ -563,8 +574,92 @@ def _contratos(ctx: Contexto, rows, gravar: bool) -> Resultado:
     return res
 
 
+TIPOS_LOG = {"entrega": "entrega", "recolha": "recolha", "implementacao": "implementacao",
+             "entrega + implementacao": "entrega_implementacao", "entrega+implementacao": "entrega_implementacao",
+             "entrega e implementacao": "entrega_implementacao", "desmontagem": "desmontagem"}
+
+
+def _logistica(ctx: Contexto, rows, gravar: bool) -> Resultado:
+    import re
+    from app.models import EstadoServicoLog, TipoServicoLog
+    from app.services.periodos import motivo_bloqueio
+    res = Resultado()
+    contratos = {_norm(c.numero): c for c in ctx.db.scalars(select(Contrato).where(
+        Contrato.tenant_id == ctx.T, Contrato.tipo == TipoContrato.LOG)).all()}
+    lojas: dict[str, Loja] = {}
+    for lj in ctx.db.scalars(select(Loja).where(Loja.tenant_id == ctx.T, Loja.ativo.is_(True))).all():
+        lojas[_norm(lj.nome)] = lj
+        if lj.codigo_erp:
+            lojas.setdefault(_norm(lj.codigo_erp), lj)
+    existentes = {_norm(s.referencia_erp): s for s in ctx.db.scalars(select(ServicoLogistico).where(
+        ServicoLogistico.tenant_id == ctx.T, ServicoLogistico.referencia_erp.is_not(None))).all()}
+    vistos: set[str] = set()
+    for n, r in rows:
+        erros: list[str] = []
+        ref = _txt(r.get("Referência ERP"))
+        if ref:
+            if _norm(ref) in vistos:
+                erros.append("Referência ERP repetida no ficheiro")
+            vistos.add(_norm(ref))
+        c = contratos.get(_norm(_txt(r.get("Contrato")) or ""))
+        if not c:
+            erros.append("Contrato de Logística não encontrado")
+        lj = lojas.get(_norm(_txt(r.get("Loja")) or ""))
+        if not lj:
+            erros.append("Loja não encontrada (use o nome ou o código ERP)")
+        tipo = TIPOS_LOG.get(_norm(_txt(r.get("Serviço")) or ""))
+        if not tipo:
+            erros.append("Serviço inválido (Entrega, Recolha, Implementação, Entrega + Implementação, Desmontagem)")
+        try:
+            d = _data(r.get("Data"), "Data")
+            if d is None:
+                erros.append("Data em falta")
+        except ValueError as e:
+            erros.append(str(e))
+            d = None
+        horas = []
+        for col in ("Hora início", "Hora fim"):
+            h = _txt(r.get(col))
+            if h and re.match(r"^\d{1,2}:\d{2}(:\d{2})?$", h):
+                h = h[:5].zfill(5)
+            elif h:
+                erros.append(f"{col}: use hh:mm")
+                h = None
+            horas.append(h)
+        if horas[0] and horas[1] and horas[1] <= horas[0]:
+            erros.append("A hora de fim tem de ser depois da hora de início")
+        try:
+            preco = _dec(r.get("Preço"), "Preço") or Decimal("0")
+        except ValueError as e:
+            erros.append(str(e))
+            preco = Decimal("0")
+        if c and d and (d < c.inicio or (c.fim and d > c.fim)):
+            erros.append("Data fora da vigência do contrato")
+        if d and (m := motivo_bloqueio(ctx.db, ctx.T, d, TipoContrato.LOG.value)):
+            erros.append(m)
+        s = existentes.get(_norm(ref)) if ref else None
+        avisos = []
+        if s and s.estado in (EstadoServicoLog.executado, EstadoServicoLog.validado, EstadoServicoLog.cancelado):
+            avisos.append("Serviço já executado, validado ou cancelado: não é alterado")
+        res.linhas.append(_linha(n, ref or f"{_txt(r.get('Loja')) or ''} {d or ''}".strip(), "atualizar" if s else "criar", erros, avisos))
+        if gravar and not erros and not avisos:
+            if not s:
+                s = ServicoLogistico(tenant_id=ctx.T, contrato_id=c.id)
+                ctx.db.add(s)
+                if ref:
+                    existentes[_norm(ref)] = s
+            s.contrato_id, s.loja_id, s.tipo, s.data = c.id, lj.id, TipoServicoLog(tipo), d
+            s.hora_inicio, s.hora_fim, s.preco, s.referencia_erp = horas[0], horas[1], preco, ref
+            for col, attr in (("Origem", "origem"), ("Materiais", "materiais"), ("Observações", "observacoes")):
+                v = _txt(r.get(col))
+                if v is not None:
+                    setattr(s, attr, v)
+    return res
+
+
 PROCESSADORES: dict[str, Callable[[Contexto, list, bool], Resultado]] = {
     "clientes": _clientes, "lojas": _lojas, "colaboradores": _colaboradores, "contratos": _contratos,
+    "logistica": _logistica,
 }
 
 
@@ -587,4 +682,5 @@ def importar(db: Session, user: User, tipo: str, conteudo: bytes, confirmar: boo
 
 def contagens(db: Session, tenant_id: int) -> dict:
     return {nome: db.scalar(select(func.count()).select_from(m).where(m.tenant_id == tenant_id))
-            for nome, m in [("clientes", Cliente), ("lojas", Loja), ("colaboradores", Colaborador), ("contratos", Contrato)]}
+            for nome, m in [("clientes", Cliente), ("lojas", Loja), ("colaboradores", Colaborador), ("contratos", Contrato),
+                            ("logistica", ServicoLogistico)]}

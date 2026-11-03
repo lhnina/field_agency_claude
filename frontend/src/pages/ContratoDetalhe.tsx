@@ -7,6 +7,7 @@ import { EmitirCredencialDialog, podeEmitir } from './Credenciais'
 import { AreaBadge, Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, useToast } from '../components/ui'
 import { DataInput } from '../components/DataInput'
 import { InsigniaLogo } from '../components/InsigniaLogo'
+import { ServicosContrato } from './Logistica'
 import { api } from '../lib/api'
 import { ESTADO_CONTRATO, dataCurta, eur, horas, iso, num } from '../lib/format'
 import { DIAS } from '../lib/types'
@@ -62,18 +63,25 @@ export default function ContratoDetalhe() {
           {c.estado === 'proposta' && <Button variant="primary" icon="check" loading={estado.isPending} onClick={() => estado.mutate('ativo')}>Ativar contrato</Button>}
           {c.estado === 'ativo' && <Button onClick={() => estado.mutate('suspenso')}>Suspender</Button>}
           {c.estado === 'suspenso' && <Button variant="primary" onClick={() => estado.mutate('ativo')}>Reativar</Button>}
-          {c.estado === 'ativo' && <Button variant="primary" icon="cal" onClick={() => nav('/planeamento')}>Ver no planeamento</Button>}
+          {c.estado === 'ativo' && (c.tipo === 'LOG'
+            ? <Button variant="primary" icon="truck" onClick={() => nav('/logistica')}>Ver na logística</Button>
+            : <Button variant="primary" icon="cal" onClick={() => nav('/planeamento')}>Ver no planeamento</Button>)}
         </div>
       </div>
 
       <Card className="overflow-hidden">
         <div className="grid grid-cols-2 md:grid-cols-4 border-b border-line-soft">
-          {[
+          {(c.tipo === 'LOG' ? [
+            ['Valor dos serviços', eur(c.valor_mensal), 'soma dos serviços não cancelados'],
+            ['Serviços', String(c.n_linhas), `vigência ${dataCurta(c.inicio)} – ${c.fim ? dataCurta(c.fim) : 'sem termo'}`],
+            ['Linhas por atribuir', String(c.linhas_por_atribuir), c.linhas_por_atribuir ? 'sem viatura ou motorista' : 'todos atribuídos'],
+            ['Preço médio/serviço', c.n_linhas ? eur(Number(c.valor_mensal) / c.n_linhas) : '—', ''],
+          ] : [
             ['Valor mensal', eur(c.valor_mensal), `${c.n_linhas} lojas`],
             ['Horas contratadas', `${horas(c.horas_mes)}/mês`, `${horas(c.horas_semana)} por semana`],
             ['Linhas por atribuir', String(c.linhas_por_atribuir), c.linhas_por_atribuir ? 'sem colaborador afeto' : 'todas atribuídas'],
             ['Preço médio/hora', Number(c.horas_semana) ? eur(Number(c.valor_mensal) / Number(c.horas_mes)) : '—', 'ponderado pelas horas'],
-          ].map(([l, v, s], i) => (
+          ]).map(([l, v, s], i) => (
             <div key={l} className={`px-[18px] py-3.5 ${i < 3 ? 'md:border-r border-line-soft' : ''}`}>
               <div className="text-xs text-ink-60">{l}</div>
               <div className={`text-xl font-semibold tracking-[-0.02em] mt-0.5 num ${l === 'Linhas por atribuir' && c.linhas_por_atribuir ? 'text-err-fg' : ''}`}>{v}</div>
@@ -81,6 +89,7 @@ export default function ContratoDetalhe() {
             </div>
           ))}
         </div>
+        {c.tipo === 'LOG' ? <ServicosContrato contrato={c} /> : <>
         <div className="flex flex-wrap items-center gap-2 px-3.5 py-3 bg-[#FAFBF9] border-b border-line-soft">
           <h3 className="text-[14.5px] font-semibold">Linhas por loja</h3>
           <span className="text-[12.5px] text-ink-60">as horas de cada dia são distribuídas pelo colaborador</span>
@@ -150,6 +159,7 @@ export default function ContratoDetalhe() {
           <span className="flex-1" />
           <span className="num">Total: <b className="text-ink font-semibold">{horas(c.horas_semana)}/semana · {horas(c.horas_mes)}/mês · {eur(c.valor_mensal)}/mês</b></span>
         </div>
+        </>}
       </Card>
 
       {linhaEdit && <LinhaDialog contrato={c} linha={linhaEdit === 'nova' ? null : linhaEdit} onClose={() => setLinhaEdit(null)} onSaved={(x) => { set(x); setLinhaEdit(null) }} />}

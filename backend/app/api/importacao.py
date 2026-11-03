@@ -15,6 +15,7 @@ PERFIS = {
     "lojas": {Perfil.administrador, Perfil.gestor, Perfil.gestor_conta},
     "contratos": {Perfil.administrador, Perfil.gestor},
     "colaboradores": {Perfil.administrador, Perfil.gestor, Perfil.rh},
+    "logistica": {Perfil.administrador, Perfil.gestor},
 }
 MAX_BYTES = 10 * 1024 * 1024
 

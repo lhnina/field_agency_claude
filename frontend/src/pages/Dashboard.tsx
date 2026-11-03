@@ -16,6 +16,7 @@ type Dash = {
 export default function Dashboard() {
   const user = session.user()
   const q = useQuery({ queryKey: ['dashboard'], queryFn: () => api<Dash>('/dashboard/operacional') })
+  const lg = useQuery({ queryKey: ['dashboard-logistica'], queryFn: () => api<{ proximos_7_dias: number; hoje: number; por_atribuir: number; com_alertas: number }>('/dashboard/logistica') })
   const hoje = new Date()
   if (q.isLoading) return <Card><Loading /></Card>
   if (q.error || !q.data) return <ErrorBox error={q.error} />
@@ -56,6 +57,9 @@ export default function Dashboard() {
               sub={`${d.documentacao.colaboradores_com_problemas} colaboradores · ${d.documentacao.a_expirar} a expirar em breve`} to="/documentacao" />}
             {d.documentacao && !(d.documentacao.expirados + d.documentacao.em_falta) && d.documentacao.a_expirar > 0 && <Alerta tone="warn" icon="shield"
               titulo={`${d.documentacao.a_expirar} documentos a expirar`} sub="Renovar antes da validade" to="/documentacao?estado=a_expirar" />}
+            {lg.data && lg.data.proximos_7_dias > 0 && <Alerta tone={lg.data.por_atribuir ? 'err' : 'warn'} icon="truck"
+              titulo={`Logística: ${lg.data.hoje} serviço${lg.data.hoje === 1 ? '' : 's'} hoje · ${lg.data.proximos_7_dias} nos próximos 7 dias`}
+              sub={`${lg.data.por_atribuir} sem viatura ou motorista · ${lg.data.com_alertas} com alertas`} to="/logistica" />}
             {d.semana.ausencias > 0 && <Alerta tone="warn" icon="sun" titulo={`${d.semana.ausencias} ${d.semana.ausencias === 1 ? "ausência" : "ausências"} esta semana`} sub="Ver serviços por substituir" to="/ausencias" />}
             {d.alertas_colaboradores.map((c) => <Alerta key={c.id} tone="err" icon="alert" titulo={c.nome} sub={c.alertas.join(' · ')} to="/planeamento" />)}
             {d.contratos_a_terminar.map((c) => <Alerta key={c.id} tone="neu" icon="file" titulo={`${c.numero} termina`} sub={dataCurta(c.fim)} to={`/contratos/${c.id}`} />)}
@@ -67,7 +71,7 @@ export default function Dashboard() {
   )
 }
 
-function Alerta({ tone, icon, titulo, sub, to }: { tone: 'warn' | 'err' | 'neu'; icon: 'sun' | 'alert' | 'file' | 'shield'; titulo: string; sub: string; to: string }) {
+function Alerta({ tone, icon, titulo, sub, to }: { tone: 'warn' | 'err' | 'neu'; icon: 'sun' | 'alert' | 'file' | 'shield' | 'truck'; titulo: string; sub: string; to: string }) {
   return (
     <li className="flex gap-3 items-start py-2.5 border-b border-line-soft last:border-0">
       <Badge tone={tone} className="!w-[30px] !h-[30px] !p-0 justify-center !rounded-lg"><Icon name={icon} size={16} /></Badge>

@@ -9,7 +9,8 @@ from app.api.base import obter
 from app.config import settings
 from app.db import get_db
 from app.models import (
-    Afetacao, Cliente, Colaborador, Contrato, EstadoContrato, LinhaContrato, Loja, Marca, Perfil, User,
+    Afetacao, Cliente, Colaborador, Contrato, EstadoContrato, EstadoServicoLog, LinhaContrato, Loja, Marca, Perfil,
+    ServicoLogistico, TipoContrato, User,
 )
 from app.schemas import (
     AfetacaoOut, AfetarIn, ContratoIn, ContratoOut, ContratoResumo, EstadoIn, GerarIn, LinhaIn, LinhaOut,
@@ -45,7 +46,17 @@ def _ativas(c: Contrato, hoje: date) -> list[LinhaContrato]:
     return [ln for ln in c.linhas if ln.fim is None or ln.fim >= hoje]
 
 
-def _resumo(c: Contrato, hoje: date) -> dict:
+def _resumo(c: Contrato, hoje: date, servicos: list | None = None) -> dict:
+    if c.tipo == TipoContrato.LOG:
+        # Logística: valor = soma dos serviços (não cancelados); "linhas" = serviços
+        vivos = [s for s in (servicos or []) if s.estado != EstadoServicoLog.cancelado]
+        return dict(
+            id=c.id, numero=c.numero, tipo=c.tipo, estado=c.estado, cliente_id=c.cliente_id, cliente_nome=c.cliente.nome,
+            marca_nome=c.marca.nome if c.marca else None, descricao=c.descricao, evento=c.evento, data=c.data,
+            inicio=c.inicio, fim=c.fim, versao=c.versao, n_linhas=len(vivos), horas_semana=Decimal("0"), horas_mes=Decimal("0"),
+            valor_mensal=sum((s.preco for s in vivos), Decimal("0")),
+            linhas_por_atribuir=sum(1 for s in vivos if s.estado == EstadoServicoLog.planeado),
+        )
     ativas = _ativas(c, hoje)
     hs = sum((ln.horas_semana for ln in ativas), Decimal("0"))
     return dict(
@@ -70,9 +81,19 @@ def _carregar(db: Session, cid: int, user: User) -> Contrato:
     return c
 
 
+def _servicos(db: Session, ids: list[int]) -> dict[int, list[ServicoLogistico]]:
+    out: dict[int, list[ServicoLogistico]] = {i: [] for i in ids}
+    if ids:
+        for s in db.scalars(select(ServicoLogistico).where(ServicoLogistico.contrato_id.in_(ids))).all():
+            out[s.contrato_id].append(s)
+    return out
+
+
 def _out(c: Contrato) -> ContratoOut:
     hoje = date.today()
-    return ContratoOut(**_resumo(c, hoje), marca_id=c.marca_id, observacoes=c.observacoes,
+    from sqlalchemy.orm import object_session
+    serv = _servicos(object_session(c), [c.id]).get(c.id) if c.tipo == TipoContrato.LOG else None
+    return ContratoOut(**_resumo(c, hoje, serv), marca_id=c.marca_id, observacoes=c.observacoes,
                        linhas=[_linha_out(ln, hoje) for ln in c.linhas])
 
 
@@ -110,9 +131,12 @@ def listar(tipo: str | None = None, estado: str | None = None, cliente_id: int |
         s = s.where(Contrato.cliente_id.in_(permitidos))
     zona = ambito.zona_supervisor(user)
     if zona is not None:  # contratos com lojas na zona do supervisor
-        s = s.where(Contrato.id.in_(select(LinhaContrato.contrato_id).join(Loja).where(Loja.zona_id == zona)))
+        s = s.where(Contrato.id.in_(select(LinhaContrato.contrato_id).join(Loja).where(Loja.zona_id == zona))
+                    | Contrato.id.in_(select(ServicoLogistico.contrato_id).join(Loja).where(Loja.zona_id == zona)))
     hoje = date.today()
-    out = [ContratoResumo(**_resumo(c, hoje)) for c in db.scalars(s.order_by(Contrato.numero.desc())).all()]
+    contratos = db.scalars(s.order_by(Contrato.numero.desc())).all()
+    serv = _servicos(db, [c.id for c in contratos if c.tipo == TipoContrato.LOG])
+    out = [ContratoResumo(**_resumo(c, hoje, serv.get(c.id))) for c in contratos]
     if q:
         ql = q.lower()
         out = [c for c in out if ql in c.numero.lower() or ql in c.cliente_nome.lower() or ql in (c.marca_nome or "").lower()]
@@ -166,7 +190,10 @@ def editar(cid: int, body: ContratoIn, user: User = Depends(requer("contratos.ed
 @router.post("/contratos/{cid}/estado", response_model=ContratoOut)
 def mudar_estado(cid: int, body: EstadoIn, user: User = Depends(requer("contratos.editar")), db: Session = Depends(get_db)):
     c = _carregar(db, cid, user)
-    if body.estado == EstadoContrato.ativo and not c.linhas:
+    if body.estado == EstadoContrato.ativo and c.tipo == TipoContrato.LOG:
+        if not db.scalar(select(ServicoLogistico.id).where(ServicoLogistico.contrato_id == c.id).limit(1)):
+            raise HTTPException(422, "Um contrato de Logística sem serviços não pode ser ativado")
+    elif body.estado == EstadoContrato.ativo and not c.linhas:
         raise HTTPException(422, "Um contrato sem linhas não pode ser ativado")
     op.auditar(db, user, "contrato", c.id, "estado", {"de": c.estado, "para": body.estado})
     c.estado = body.estado

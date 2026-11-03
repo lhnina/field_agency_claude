@@ -473,3 +473,73 @@ class Credencial(TenantMixin, Base):
     cliente: Mapped[Cliente] = relationship()
     modelo: Mapped[ModeloCredencial] = relationship()
     substitui: Mapped["Credencial | None"] = relationship(remote_side="Credencial.id")
+
+
+# ---------------------------------------------------------------- logística
+class Viatura(TenantMixin, Base):
+    """Viatura da agência. Uma viatura faz serviços para vários clientes e lojas."""
+    __tablename__ = "viaturas"
+    id: Mapped[int] = IdCol()
+    matricula: Mapped[str] = mapped_column(String(12))
+    descricao: Mapped[str | None] = mapped_column(String(120))  # marca/modelo, tipo de caixa
+    custo_km: Mapped[Decimal] = mapped_column(Numeric(6, 3), default=Decimal("0"))  # €/km (combustível, desgaste)
+    observacoes: Mapped[str | None] = mapped_column(String(250))
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
+class TipoServicoLog(str, enum.Enum):
+    entrega = "entrega"
+    recolha = "recolha"
+    implementacao = "implementacao"
+    entrega_implementacao = "entrega_implementacao"
+    desmontagem = "desmontagem"
+
+
+class EstadoServicoLog(str, enum.Enum):
+    planeado = "planeado"      # sem viatura/motorista
+    atribuido = "atribuido"    # com viatura e motorista
+    executado = "executado"    # registo de execução feito
+    validado = "validado"      # validado pelo gestor: conta para faturação e custos
+    cancelado = "cancelado"
+
+
+class ServicoLogistico(TenantMixin, Base):
+    """Linha de um contrato de Logística: um serviço pontual numa loja, numa data (entrega, recolha, implementação…)."""
+    __tablename__ = "servicos_logisticos"
+    id: Mapped[int] = IdCol()
+    contrato_id: Mapped[int] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
+    loja_id: Mapped[int] = mapped_column(ForeignKey("lojas.id"), index=True)
+    tipo: Mapped[TipoServicoLog] = mapped_column(Enum(TipoServicoLog, name="tipo_servico_log"))
+    data: Mapped[date] = mapped_column(Date, index=True)
+    hora_inicio: Mapped[str | None] = mapped_column(String(5))  # janela horária
+    hora_fim: Mapped[str | None] = mapped_column(String(5))
+    origem: Mapped[str | None] = mapped_column(String(200))     # armazém / morada de origem
+    materiais: Mapped[str | None] = mapped_column(Text)
+    preco: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=Decimal("0"))  # valor de faturação do serviço
+    referencia_erp: Mapped[str | None] = mapped_column(String(40), index=True)    # pedido/guia no ERP
+    observacoes: Mapped[str | None] = mapped_column(Text)
+    estado: Mapped[EstadoServicoLog] = mapped_column(Enum(EstadoServicoLog, name="estado_servico_log"), default=EstadoServicoLog.planeado)
+    # atribuição
+    viatura_id: Mapped[int | None] = mapped_column(ForeignKey("viaturas.id"), index=True)
+    colaborador_id: Mapped[int | None] = mapped_column(ForeignKey("colaboradores.id"), index=True)  # motorista
+    ajudante_id: Mapped[int | None] = mapped_column(ForeignKey("colaboradores.id"))
+    # execução
+    km_partida: Mapped[int | None] = mapped_column(Integer)
+    km_chegada: Mapped[int | None] = mapped_column(Integer)
+    portagens: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    outros_custos: Mapped[Decimal | None] = mapped_column(Numeric(8, 2))
+    outros_custos_desc: Mapped[str | None] = mapped_column(String(200))
+    inicio_real: Mapped[str | None] = mapped_column(String(5))
+    fim_real: Mapped[str | None] = mapped_column(String(5))
+    observacao_execucao: Mapped[str | None] = mapped_column(String(250))
+    comprovativo_nome: Mapped[str | None] = mapped_column(String(200))
+    comprovativo_tipo: Mapped[str | None] = mapped_column(String(100))
+    comprovativo: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    executado_por_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    validado_por_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    motivo: Mapped[str | None] = mapped_column(String(250))  # cancelamento / rejeição
+    contrato: Mapped[Contrato] = relationship()
+    loja: Mapped[Loja] = relationship()
+    viatura: Mapped[Viatura | None] = relationship()
+    colaborador: Mapped[Colaborador | None] = relationship(foreign_keys=[colaborador_id])
+    ajudante: Mapped[Colaborador | None] = relationship(foreign_keys=[ajudante_id])

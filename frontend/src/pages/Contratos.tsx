@@ -35,7 +35,7 @@ export default function Contratos() {
         {lista.isLoading ? <Loading /> : lista.error ? <div className="p-4"><ErrorBox error={lista.error} /></div> : itens.length === 0 ? <Empty title="Sem contratos">Crie o primeiro contrato para começar a planear.</Empty> : (
           <div className="overflow-x-auto">
             <table className="tbl">
-              <thead><tr><th>Contrato</th><th>Área</th><th>Estado</th><th>Vigência</th><th className="text-right">Lojas</th><th className="text-right">Horas/semana</th><th className="text-right">Contratadas/mês</th><th className="text-right">Valor mensal</th><th /></tr></thead>
+              <thead><tr><th>Contrato</th><th>Área</th><th>Estado</th><th>Vigência</th><th className="text-right">Lojas / serviços</th><th className="text-right">Horas/semana</th><th className="text-right">Contratadas/mês</th><th className="text-right">Valor mensal</th><th /></tr></thead>
               <tbody>
                 {itens.map((c) => (
                   <tr key={c.id} className="cursor-pointer" onClick={() => nav(`/contratos/${c.id}`)}>
@@ -47,10 +47,10 @@ export default function Contratos() {
                     <td><AreaBadge tipo={c.tipo} /></td>
                     <td><Badge tone={ESTADO_CONTRATO[c.estado].tone} dot>{ESTADO_CONTRATO[c.estado].label}</Badge></td>
                     <td className="text-[12.5px] text-ink-60 num">{dataCurta(c.inicio)} – {c.fim ? dataCurta(c.fim) : 'sem termo'}</td>
-                    <td className="text-right num">{c.n_linhas}{c.linhas_por_atribuir > 0 && <div className="text-xs text-err-fg">{c.linhas_por_atribuir} por atribuir</div>}</td>
-                    <td className="text-right num">{horas(c.horas_semana)}</td>
-                    <td className="text-right num">{horas(c.horas_mes)}</td>
-                    <td className="text-right num font-medium">{eur(c.valor_mensal)}</td>
+                    <td className="text-right num">{c.n_linhas}{c.tipo === 'LOG' && <span className="text-xs text-ink-60"> serv.</span>}{c.linhas_por_atribuir > 0 && <div className="text-xs text-err-fg">{c.linhas_por_atribuir} por atribuir</div>}</td>
+                    <td className="text-right num">{c.tipo === 'LOG' ? '—' : horas(c.horas_semana)}</td>
+                    <td className="text-right num">{c.tipo === 'LOG' ? '—' : horas(c.horas_mes)}</td>
+                    <td className="text-right num font-medium">{eur(c.valor_mensal)}{c.tipo === 'LOG' && <div className="text-xs text-ink-60 font-normal">total dos serviços</div>}</td>
                     <td className="text-right"><Icon name="cr" size={16} className="text-ink-60" /></td>
                   </tr>
                 ))}
@@ -90,7 +90,7 @@ export function NovoContrato({ onClose, onCriado, inicial }: { onClose: () => vo
         <Field label="Tipo">{(id) => (
           <select id={id} className="inp" value={f.tipo} onChange={set('tipo')} disabled={!!inicial}>
             <option value="REP">Reposição</option><option value="PRO">Promoção / ativação</option>
-            <option value="LOG" disabled>Logística (próximo incremento)</option><option value="EQF" disabled>Equipas Fixas (próximo incremento)</option>
+            <option value="LOG">Logística</option><option value="EQF" disabled>Equipas Fixas (próximo incremento)</option>
           </select>)}</Field>
         <Field label="Data do contrato">{(id) => <DataInput id={id} value={f.data} onChange={(v) => setF({ ...f, data: v })} />}</Field>
         <Field label="Cliente">{(id) => (

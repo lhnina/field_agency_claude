@@ -12,7 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Cliente, Colaborador, Contrato, LinhaContrato, Loja, Marca, Ocorrencia, Perfil, User
+from app.models import Cliente, Colaborador, Contrato, LinhaContrato, Loja, Marca, Ocorrencia, Perfil, ServicoLogistico, User
 
 
 def clientes_permitidos(db: Session, user: User) -> set[int] | None:
@@ -43,6 +43,12 @@ def ocorrencia_visivel(o: Ocorrencia, zona: int | None, eq: set[int] | None) -> 
     return (cid in eq) if (cid is not None and eq is not None) else o.linha.loja.zona_id == zona
 
 
+def servico_na_zona(s: ServicoLogistico, zona: int) -> bool:
+    """Serviço logístico visível ao supervisor: loja da zona, ou motorista/ajudante da zona."""
+    return (s.loja.zona_id == zona or (s.colaborador is not None and s.colaborador.zona_id == zona)
+            or (s.ajudante is not None and s.ajudante.zona_id == zona))
+
+
 def cliente_de(obj) -> int | None:
     if isinstance(obj, Cliente):
         return obj.id
@@ -52,6 +58,8 @@ def cliente_de(obj) -> int | None:
         return obj.contrato.cliente_id
     if isinstance(obj, Ocorrencia):
         return obj.linha.contrato.cliente_id
+    if isinstance(obj, ServicoLogistico):
+        return obj.contrato.cliente_id
     return None
 
 
@@ -59,6 +67,8 @@ def verificar(db: Session, user: User, obj) -> None:
     """404 (como se não existisse) quando o objeto está fora do âmbito do utilizador."""
     zona = zona_supervisor(user)
     if zona is not None and isinstance(obj, (Loja, Colaborador)) and obj.zona_id != zona:
+        raise HTTPException(404, "Registo não encontrado")
+    if zona is not None and isinstance(obj, ServicoLogistico) and not servico_na_zona(obj, zona):
         raise HTTPException(404, "Registo não encontrado")
     permitidos = clientes_permitidos(db, user)
     if permitidos is None:

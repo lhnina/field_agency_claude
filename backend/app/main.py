@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import administracao, base, configuracao, contratos, credenciais, documentos, financeiro, importacao, operacao, pessoas
+from app.api import administracao, base, configuracao, contratos, credenciais, documentos, financeiro, logistica, importacao, operacao, pessoas
 from app.config import settings
 
 @asynccontextmanager
@@ -26,7 +26,7 @@ app = FastAPI(
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True,
                    allow_methods=["*"], allow_headers=["*"])
 
-for r in (base.router, pessoas.router, contratos.router, operacao.router, financeiro.router, importacao.router, configuracao.router, administracao.router, documentos.router, credenciais.router):
+for r in (base.router, pessoas.router, contratos.router, operacao.router, financeiro.router, importacao.router, configuracao.router, administracao.router, documentos.router, credenciais.router, logistica.router):
     app.include_router(r, prefix="/api")
 
 

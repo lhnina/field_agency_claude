@@ -174,7 +174,7 @@ function TabelaCredenciais({ itens, colaborador = true }: { itens: CredencialT[]
                 <td className="text-[12.5px] text-ink-60">{c.modelo}</td>
                 <td className="text-right whitespace-nowrap">
                   <AcaoIcone icon="download" label={`Descarregar ${c.numero} (Word)`} onClick={() => baixar(c).catch((e) => toast(e.message, 'err'))} />
-                  {c.estado === 'emitida' && podeEmitir() && <Button size="sm" variant="ghost" onClick={() => setAnular(c)}>Anular</Button>}
+                  {c.estado === 'emitida' && podeEmitir() && <AcaoIcone icon="trash" tom="perigo" label={`Anular ${c.numero}`} onClick={() => setAnular(c)} />}
                 </td>
               </tr>
             )

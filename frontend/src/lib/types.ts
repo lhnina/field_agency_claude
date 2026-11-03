@@ -101,3 +101,19 @@ export type PrepararCredencial = {
   modelos: { id: number; nome: string; versao: number; cliente: boolean }[]; aviso_modelo: string | null; validade: string
   data_exame_medico: string | null; em_falta: string[]; substituiveis: CredencialT[]
 }
+
+export type EstadoServicoLog = 'planeado' | 'atribuido' | 'executado' | 'validado' | 'cancelado'
+export type TipoServicoLog = 'entrega' | 'recolha' | 'implementacao' | 'entrega_implementacao' | 'desmontagem'
+export type CustosLog = { km: number; custo_km: number; horas: number; mao_obra: number; portagens: number; outros: number; total: number }
+export type ServicoLog = {
+  id: number; contrato_id: number; contrato_numero: string; cliente_id: number; cliente: string; marca: string | null
+  loja_id: number; loja: string; loja_morada: string; loja_zona: string | null; insignia_id: number | null; insignia: string | null; insignia_logo_v: number | null
+  tipo: TipoServicoLog; tipo_label: string; data: string; hora_inicio: string | null; hora_fim: string | null; origem: string | null
+  materiais: string | null; preco: number; referencia_erp: string | null; observacoes: string | null; estado: EstadoServicoLog
+  viatura_id: number | null; viatura: string | null; colaborador_id: number | null; colaborador: string | null
+  ajudante_id: number | null; ajudante: string | null; km_partida: number | null; km_chegada: number | null
+  portagens: number | null; outros_custos: number | null; outros_custos_desc: string | null; inicio_real: string | null; fim_real: string | null
+  observacao_execucao: string | null; comprovativo_nome: string | null; motivo: string | null
+  custos: CustosLog | null; margem: number | null; alertas: string[]
+}
+export type Viatura = { id: number; matricula: string; descricao: string | null; custo_km: number; observacoes: string | null; ativo: boolean; servicos: number }

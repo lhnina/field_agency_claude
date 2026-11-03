@@ -191,6 +191,9 @@ def run(reset: bool = True) -> None:
             fecho.registar_execucao(db, users["rui"], o, max(o.horas_planeadas - D("1"), D("0")), "Saiu mais cedo (loja sem stock)", hoje)
     _documentacao(db, T, cols, clientes, ins, users["hugo"], hoje)
     _credenciais(db, T, cols, users["hugo"], hoje)
+    lg = contrato(TipoContrato.LOG, "Quinta do Vale Sumos", 2026, date(2026, 9, 1), date(2026, 12, 31),
+                  descricao="Entregas e montagem de expositores — campanha de inverno")
+    _logistica(db, T, lg, lojas, cols, users["hugo"], hoje)
     db.commit()
     db.close()
     print("Dados de demonstração criados. Utilizadores: marta|hugo|joana|tomas|rui|sara|admin@promovida.pt / demo1234")
@@ -269,6 +272,44 @@ def _credenciais(db, T, cols, autor, hoje) -> None:
     for nome, dn in nasc.items():
         cols[nome].data_nascimento = dn
         cols[nome].niss = f"1{zlib.crc32(nome.encode()) % 10**10:010d}"
+    db.flush()
+
+
+
+def _logistica(db, T, c, lojas, cols, autor, hoje) -> None:
+    """Viaturas e serviços logísticos: alguns feitos e validados, alguns por executar, um sem viatura."""
+    from app.models import EstadoServicoLog as E, ServicoLogistico, TipoServicoLog as TS, Viatura
+    v = {m: Viatura(tenant_id=T, matricula=m, descricao=d, custo_km=D(k)) for m, d, k in [
+        ("AA-12-BC", "Renault Master · caixa fechada", "0.32"), ("BD-45-ZX", "Citroën Berlingo", "0.21"),
+        ("CE-78-QR", "Iveco Daily · plataforma", "0.38")]}
+    db.add_all(v.values())
+    db.flush()
+    seg = hoje - timedelta(days=hoje.weekday())
+    d = lambda n: seg + timedelta(days=n)  # noqa: E731
+    servicos = [  # (dias desde segunda, loja, tipo, janela, materiais, preço, viatura, motorista, ajudante, estado, execução)
+        (-7, "Continente Colombo", TS.entrega_implementacao, ("08:00", "11:00"), "2 expositores de chão; 1 ilha de frio", "145.00", "AA-12-BC", "Pedro Almeida", "Marco Dias", E.validado, (45210, 45262, "6.40", "08:05", "11:20")),
+        (-6, "Pingo Doce Loures", TS.entrega, ("09:00", "12:00"), "40 cartazes A2; 6 wobblers", "65.00", "BD-45-ZX", "Tiago Moreira", None, E.validado, (88120, 88171, "3.20", "09:10", "10:40")),
+        (-4, "Auchan Sintra", TS.implementacao, ("14:00", "18:00"), "Montagem de topo de gôndola", "120.00", "AA-12-BC", "Pedro Almeida", None, E.executado, (45262, 45318, "4.85", "14:00", "17:15")),
+        (-2, "Continente Oeiras", TS.recolha, None, "Recolha de 1 expositor danificado", "55.00", "BD-45-ZX", "Tiago Moreira", None, E.atribuido, None),
+        (1, "Continente Amadora", TS.entrega_implementacao, ("08:00", "12:00"), "3 expositores de chão; 100 folhetos", "160.00", "AA-12-BC", "Pedro Almeida", "Marco Dias", E.atribuido, None),
+        (1, "Intermarché Odivelas", TS.entrega, ("10:00", "12:00"), "20 cartazes A2", "55.00", "AA-12-BC", "João Ferreira", None, E.atribuido, None),
+        (2, "Lidl Odivelas", TS.entrega, ("09:00", "11:00"), "Display de balcão", "50.00", None, None, None, E.planeado, None),
+        (3, "Pingo Doce Benfica", TS.implementacao, ("15:00", "18:00"), "Montagem de ilha promocional", "130.00", "CE-78-QR", "Tiago Moreira", None, E.atribuido, None),
+        (8, "Continente Colombo", TS.desmontagem, ("20:00", "23:00"), "Desmontagem e recolha da ilha de frio", "110.00", None, None, None, E.planeado, None),
+    ]
+    for dia, loja, tipo, janela, mat, preco, vt, mot, aj, estado, ex in servicos:
+        s = ServicoLogistico(tenant_id=T, contrato_id=c.id, loja_id=lojas[loja].id, tipo=tipo, data=d(dia),
+                             hora_inicio=janela[0] if janela else None, hora_fim=janela[1] if janela else None,
+                             origem="Armazém Alverca", materiais=mat, preco=D(preco), estado=estado,
+                             referencia_erp=f"GT-2026/{1500 + len(mat)}{dia + 10:02d}",
+                             viatura_id=v[vt].id if vt else None, colaborador_id=cols[mot].id if mot else None,
+                             ajudante_id=cols[aj].id if aj else None)
+        if ex:
+            s.km_partida, s.km_chegada, s.portagens, s.inicio_real, s.fim_real = ex[0], ex[1], D(ex[2]), ex[3], ex[4]
+            s.executado_por_id = autor.id
+            if estado == E.validado:
+                s.validado_por_id = autor.id
+        db.add(s)
     db.flush()
 
 
