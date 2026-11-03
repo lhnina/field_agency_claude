@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { LojaPicker } from '../components/LojaPicker'
 import { AreaBadge, Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, useToast } from '../components/ui'
 import { api } from '../lib/api'
 import { ESTADO_CONTRATO, dataCurta, eur, horas, iso, num } from '../lib/format'
 import { DIAS } from '../lib/types'
-import type { Colaborador, Contrato, Linha, Loja } from '../lib/types'
+import type { Colaborador, Contrato, Linha } from '../lib/types'
 import { NovoContrato } from './Contratos'
 
 const DIA_LABEL = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom']
@@ -126,10 +127,9 @@ export default function ContratoDetalhe() {
 
 function LinhaDialog({ contrato, linha, onClose, onSaved }: { contrato: Contrato; linha: Linha | null; onClose: () => void; onSaved: (c: Contrato) => void }) {
   const toast = useToast()
-  const lojas = useQuery({ queryKey: ['lojas'], queryFn: () => api<Loja[]>('/lojas') })
   const pro = contrato.tipo === 'PRO'
   const [f, setF] = useState(() => ({
-    loja_id: linha ? String(linha.loja_id) : '', inicio: linha?.inicio ?? (contrato.inicio > iso(new Date()) ? contrato.inicio : iso(new Date())),
+    loja: linha ? { id: linha.loja_id, nome: linha.loja_nome } : null as { id: number; nome: string } | null, inicio: linha?.inicio ?? (contrato.inicio > iso(new Date()) ? contrato.inicio : iso(new Date())),
     fim: linha?.fim ?? contrato.fim ?? '', preco_hora: linha?.preco_hora ?? '18.00', hora_inicio: linha?.hora_inicio ?? '',
     mecanica: linha?.mecanica ?? '', custo_hora_especial: linha?.custo_hora_especial ?? '', observacoes: linha?.observacoes ?? '',
     h: DIAS.map((d) => (linha ? String(Number(linha[`h_${d}`]) || '') : '')),
@@ -138,7 +138,7 @@ function LinhaDialog({ contrato, linha, onClose, onSaved }: { contrato: Contrato
   const m = useMutation({
     mutationFn: () => {
       const body: Record<string, unknown> = {
-        loja_id: Number(f.loja_id), inicio: f.inicio, fim: f.fim || null, preco_hora: Number(String(f.preco_hora).replace(',', '.')),
+        loja_id: f.loja!.id, inicio: f.inicio, fim: f.fim || null, preco_hora: Number(String(f.preco_hora).replace(',', '.')),
         hora_inicio: f.hora_inicio || null, mecanica: f.mecanica || null, observacoes: f.observacoes || null,
         custo_hora_especial: f.custo_hora_especial ? Number(String(f.custo_hora_especial).replace(',', '.')) : null,
       }
@@ -149,12 +149,11 @@ function LinhaDialog({ contrato, linha, onClose, onSaved }: { contrato: Contrato
   })
   return (
     <Modal title={linha ? `Editar ${linha.loja_nome}` : 'Adicionar loja ao contrato'} onClose={onClose} width={640}
-      footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" loading={m.isPending} disabled={!f.loja_id || total === 0} onClick={() => m.mutate()}>Guardar</Button></>}>
+      footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" loading={m.isPending} disabled={!f.loja || total === 0} onClick={() => m.mutate()}>Guardar</Button></>}>
       <div className="grid grid-cols-2 gap-3.5">
         <Field label="Loja" className="col-span-2">{(id) => (
-          <select id={id} className="inp" value={f.loja_id} onChange={(e) => setF({ ...f, loja_id: e.target.value })}>
-            <option value="">Escolher…</option>{lojas.data?.map((l) => <option key={l.id} value={l.id}>{l.nome}{l.zona ? ` · ${l.zona.nome}` : ''}</option>)}
-          </select>)}</Field>
+          <LojaPicker id={id} value={f.loja} usadas={new Set(contrato.linhas.map((l) => l.loja_id))}
+            onChange={(l) => setF({ ...f, loja: l ? { id: l.id, nome: l.nome } : null })} />)}</Field>
         <div className="col-span-2">
           <div className="lbl mb-1.5">Horas por dia da semana</div>
           <div className="grid grid-cols-7 gap-2">

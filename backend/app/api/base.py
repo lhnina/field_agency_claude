@@ -172,16 +172,21 @@ def estado_marca(mid: int, body: EstadoAtivoIn, user: User = Depends(requer("dad
 
 # ---------------------------------------------------------------- lojas
 @router.get("/lojas", response_model=list[LojaOut], tags=["dados mestre"])
-def lojas(q: str | None = None, zona_id: int | None = None, inativos: bool = False,
+def lojas(q: str | None = None, zona_id: int | None = None, inativos: bool = False, limite: int | None = None,
           user: User = Depends(requer("dados_mestre.ler")), db: Session = Depends(get_db)):
     s = select(Loja).where(Loja.tenant_id == user.tenant_id)
     if not inativos:
         s = s.where(Loja.ativo.is_(True))
     if q:
-        s = s.where(Loja.nome.ilike(f"%{q}%") | Loja.localidade.ilike(f"%{q}%"))
+        for termo in q.split():
+            t = f"%{termo}%"
+            s = s.where(Loja.nome.ilike(t) | Loja.localidade.ilike(t) | Loja.codigo_postal.ilike(t) | Loja.morada.ilike(t))
     if zona_id:
         s = s.where(Loja.zona_id == zona_id)
-    return db.scalars(s.order_by(Loja.ativo.desc(), Loja.nome)).all()
+    s = s.order_by(Loja.ativo.desc(), Loja.nome)
+    if limite:
+        s = s.limit(min(limite, 200))
+    return db.scalars(s).all()
 
 
 @router.get("/lojas/{lid}", response_model=LojaOut, tags=["dados mestre"])
