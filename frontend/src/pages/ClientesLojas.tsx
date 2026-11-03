@@ -4,19 +4,25 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BotaoEstado, Facto, MostrarInativos } from '../components/Estado'
 import { AreaBadge, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, Seg, useToast } from '../components/ui'
 import { api } from '../lib/api'
+import { Tabela } from './Tabelas'
 import { ESTADO_CONTRATO, eur, horas } from '../lib/format'
 import type { Cliente, ContratoResumo, IdNome, Loja, TipoContrato } from '../lib/types'
 
+type Tab = 'clientes' | 'lojas' | 'insignias' | 'zonas'
+
 export default function ClientesLojas() {
-  const [tab, setTab] = useState<'clientes' | 'lojas'>('clientes')
+  const [tab, setTab] = useState<Tab>('clientes')
   const [novo, setNovo] = useState(false)
   return (
     <>
       <PageHeader crumb="Comercial" title="Clientes e lojas">
-        <Seg label="Secção" value={tab} onChange={(v) => setTab(v as 'clientes' | 'lojas')} options={[{ value: 'clientes', label: 'Clientes' }, { value: 'lojas', label: 'Lojas' }]} />
-        <Button variant="primary" icon="plus" onClick={() => setNovo(true)}>{tab === 'lojas' ? 'Nova loja' : 'Novo cliente'}</Button>
+        <Seg label="Secção" value={tab} onChange={(v) => setTab(v as Tab)}
+          options={[{ value: 'clientes', label: 'Clientes' }, { value: 'lojas', label: 'Lojas' }, { value: 'insignias', label: 'Insígnias' }, { value: 'zonas', label: 'Zonas' }]} />
+        {(tab === 'clientes' || tab === 'lojas') && <Button variant="primary" icon="plus" onClick={() => setNovo(true)}>{tab === 'lojas' ? 'Nova loja' : 'Novo cliente'}</Button>}
       </PageHeader>
-      {tab === 'clientes' ? <Clientes /> : <Lojas />}
+      {tab === 'clientes' ? <Clientes /> : tab === 'lojas' ? <Lojas />
+        : tab === 'insignias' ? <div className="max-w-[760px]"><Tabela key="insignias" path="insignias" titulo="Insígnias (cadeias de distribuição)" ajuda="Cadeias a que pertencem as lojas, por exemplo Continente, Pingo Doce ou Auchan." /></div>
+        : <div className="max-w-[760px]"><Tabela key="zonas" path="zonas" titulo="Zonas" ajuda="Usadas nas lojas e nos colaboradores para o planeamento, as sugestões de substitutos e os feriados municipais." /></div>}
       {novo && (tab === 'lojas' ? <LojaDialog onClose={() => setNovo(false)} /> : <ClienteDialog onClose={() => setNovo(false)} />)}
     </>
   )
@@ -67,7 +73,7 @@ function Clientes() {
                 return (
                   <tr key={c.id} className={`${atual?.id === c.id ? '[&>td]:!bg-[#EAF4F2]' : ''} ${c.ativo ? '' : 'opacity-60'}`}>
                     <td><NomeLink nome={c.nome} ativo={c.ativo} onClick={() => setSel(c.id)} />
-                      <div className="text-xs text-ink-60">{[c.nif && `NIF ${c.nif}`, c.codigo_erp && `ERP ${c.codigo_erp}`, c.marcas.filter((m) => m.ativo !== false).map((m) => m.nome).join(', ')].filter(Boolean).join(' · ')}</div></td>
+                      <div className="text-xs text-ink-60">{[c.codigo_erp && `Código ERP ${c.codigo_erp}`, c.nif && `NIF ${c.nif}`].filter(Boolean).join(' · ') || '—'}</div></td>
                     <td className="text-[12.5px]">{c.localidade ?? '—'}</td>
                     <td className="text-[12.5px]">{c.gestor_conta ?? '—'}</td>
                     <td className="text-right num">{ca.length}</td>

@@ -16,7 +16,7 @@ export default function Tabelas() {
   )
 }
 
-function Tabela({ path, titulo, ajuda }: { path: string; titulo: string; ajuda: string }) {
+export function Tabela({ path, titulo, ajuda }: { path: string; titulo: string; ajuda: string }) {
   const qc = useQueryClient()
   const toast = useToast()
   const pode = ['administrador', 'gestor'].includes(session.user()?.perfil ?? '')
