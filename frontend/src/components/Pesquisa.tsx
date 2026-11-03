@@ -33,6 +33,23 @@ export function Pesquisa<T extends { id: number }>({ id, chave, pesquisar, value
     document.addEventListener('mousedown', fora); return () => document.removeEventListener('mousedown', fora)
   }, [])
 
+  // A lista é posicionada em relação à janela, para não ficar cortada dentro de diálogos pequenos.
+  const [pos, setPos] = useState<{ top?: number; bottom?: number; left: number; width: number } | null>(null)
+  useEffect(() => {
+    if (!aberto) return
+    const calcular = () => {
+      const el = caixa.current?.getBoundingClientRect()
+      if (!el) return
+      const abaixo = window.innerHeight - el.bottom
+      setPos(abaixo < 300 && el.top > abaixo
+        ? { bottom: window.innerHeight - el.top + 4, left: el.left, width: el.width }
+        : { top: el.bottom + 4, left: el.left, width: el.width })
+    }
+    calcular()
+    window.addEventListener('resize', calcular); window.addEventListener('scroll', calcular, true)
+    return () => { window.removeEventListener('resize', calcular); window.removeEventListener('scroll', calcular, true) }
+  }, [aberto])
+
   const r = useQuery({ queryKey: [chave, 'pesquisa', termo], queryFn: () => pesquisar(termo, LIMITE), enabled: aberto && termo.length >= 2 })
   const itens = ordenar ? [...(r.data ?? [])].sort(ordenar) : (r.data ?? [])
 
@@ -66,7 +83,7 @@ export function Pesquisa<T extends { id: number }>({ id, chave, pesquisar, value
           }} />
       </div>
       {aberto && (
-        <div id={lista} role="listbox" className="absolute z-30 mt-1 w-full max-h-72 overflow-y-auto bg-white border border-line rounded-lg shadow-lg py-1">
+        <div id={lista} role="listbox" style={pos ?? undefined} className="fixed z-[60] max-h-72 overflow-y-auto bg-white border border-line rounded-lg shadow-lg py-1">
           {termo.length < 2 ? <div className="px-3 py-2 text-[12.5px] text-ink-60">Escreva pelo menos 2 letras para pesquisar.</div>
             : r.isFetching && !r.data ? <div className="px-3 py-2"><Spinner /></div>
             : itens.length === 0 ? <div className="px-3 py-2 text-[12.5px] text-ink-60">Sem resultados.</div>

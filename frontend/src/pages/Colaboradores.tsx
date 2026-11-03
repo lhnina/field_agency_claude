@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Avatar, Badge, Bar, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, useToast } from '../components/ui'
+import { AcaoIcone, Avatar, Badge, Bar, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, Seccao, useToast } from '../components/ui'
 import { DataInput } from '../components/DataInput'
 import { CredenciaisColaborador } from './Credenciais'
 import { abrirFicheiro, api } from '../lib/api'
@@ -138,13 +138,9 @@ type Af = { linha_id: number; loja: string; cliente: string; contrato_id: number
 function Afetacoes({ id, total, prestador, onPlaneamento }: { id: number; total: number; prestador: boolean; onPlaneamento: () => void }) {
   const q = useQuery({ queryKey: ['colaborador-afetacoes', id], queryFn: () => api<Af[]>(`/colaboradores/${id}/afetacoes`) })
   return (
-    <div className="px-[18px] py-3.5 border-t border-line-soft">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="text-[13px] font-semibold">Lojas afetas</div>
-        <span className="text-[12.5px] text-ink-60 num">{horas(total)} por semana{prestador ? '' : ' de 40 h'}</span>
-        <span className="flex-1" />
-        <Button size="sm" icon="cal" onClick={onPlaneamento}>Ver no planeamento</Button>
-      </div>
+    <Seccao titulo="Lojas afetas"
+      resumo={<span className="text-[12.5px] text-ink-60 num">{q.data ? `${q.data.length} loja${q.data.length === 1 ? '' : 's'} · ` : ''}{horas(total)} por semana{prestador ? '' : ' de 40 h'}</span>}
+      acao={<Button size="sm" variant="subtil" icon="cal" onClick={onPlaneamento}>Ver no planeamento</Button>}>
       <ul className="flex flex-col gap-2">
         {q.data?.map((a) => (
           <li key={a.linha_id} className="text-[13px]">
@@ -154,7 +150,7 @@ function Afetacoes({ id, total, prestador, onPlaneamento }: { id: number; total:
         ))}
         {q.data?.length === 0 && <li className="text-[12.5px] text-ink-60">Sem lojas afetas. Use "Ver no planeamento" para lhe atribuir serviços por atribuir.</li>}
       </ul>
-    </div>
+    </Seccao>
   )
 }
 
@@ -162,16 +158,16 @@ function DocumentosColab({ id, nome }: { id: number; nome: string }) {
   const q = useQuery({ queryKey: ['documentos-colaborador', id], queryFn: () => api<{ linhas: SituacaoDoc[]; resumo: ResumoDoc; historico: DocumentoReg[] }>(`/colaboradores/${id}/documentos`) })
   const [dlg, setDlg] = useState<{ linha?: SituacaoDoc; modo: 'novo' | 'corrigir' } | null>(null)
   const toast = useToast()
+  const nav = useNavigate()
   const r = q.data?.resumo
-  const pend = r ? r.expirados + r.em_falta : 0
+  const alertas = r ? [
+    r.em_falta && `${r.em_falta} documento${r.em_falta > 1 ? 's' : ''} em falta`,
+    r.expirados && `${r.expirados} expirado${r.expirados > 1 ? 's' : ''}`,
+  ].filter(Boolean).join(' · ') : ''
   return (
-    <div className="px-[18px] py-3.5 border-t border-line-soft">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="text-[13px] font-semibold">Documentação</div>
-        {r && (pend ? <Badge tone="err" dot>{pend} pendente{pend > 1 ? 's' : ''}</Badge> : r.a_expirar ? <Badge tone="warn" dot>{r.a_expirar} a expirar</Badge> : <Badge tone="ok" dot>Em dia</Badge>)}
-        <span className="flex-1" />
-        {podeRegistarDocs() && <Button size="sm" icon="plus" onClick={() => setDlg({ modo: 'novo' })}>Documento</Button>}
-      </div>
+    <Seccao titulo="Documentação"
+      resumo={r && (alertas ? <Badge tone="err" dot>{alertas}</Badge> : r.a_expirar ? <Badge tone="warn" dot>{r.a_expirar} a expirar</Badge> : <Badge tone="ok" dot>Em dia</Badge>)}
+      acao={<Button size="sm" variant="subtil" icon="shield" onClick={() => nav(`/documentacao?colaborador=${id}`)}>Ver na documentação</Button>}>
       <ul className="flex flex-col divide-y divide-line-soft">
         {q.data?.linhas.map((l) => {
           const d = l.documento
@@ -184,15 +180,15 @@ function DocumentosColab({ id, nome }: { id: number; nome: string }) {
               {d?.ficheiro_nome && <button type="button" aria-label={`Abrir anexo de ${l.tipo}`} title={d.ficheiro_nome} className="p-1 text-petrol-600 hover:bg-bg rounded"
                 onClick={() => abrirFicheiro(`/documentos/${d.id}/ficheiro`).catch((x) => toast(x instanceof Error ? x.message : 'Erro', 'err'))}><Icon name="file" size={15} /></button>}
               <Badge tone={l.estado === 'em_falta' && !l.obrigatorio ? 'neu' : ESTADO_DOC[l.estado].tone} dot>{ESTADO_DOC[l.estado].label}</Badge>
-              {podeRegistarDocs() && <Button size="sm" variant="ghost" onClick={() => setDlg({ linha: l, modo: 'novo' })}>{d ? 'Renovar' : 'Registar'}</Button>}
+              {podeRegistarDocs() && <AcaoIcone icon={d ? 'sync' : 'plus'} label={`${d ? 'Renovar' : 'Registar'} ${l.tipo}`} onClick={() => setDlg({ linha: l, modo: 'novo' })} />}
             </li>
           )
         })}
         {q.data?.linhas.length === 0 && <li className="text-[12.5px] text-ink-60 py-1">Sem documentos obrigatórios nem entregues.</li>}
       </ul>
-      {!!q.data?.historico.length && <div className="text-xs text-ink-60 mt-1.5">{q.data.historico.length} documento{q.data.historico.length > 1 ? 's' : ''} anterior{q.data.historico.length > 1 ? 'es' : ''} no histórico · <Link to="/documentacao" className="text-petrol-600 hover:underline">Ver documentação</Link></div>}
+      {!!q.data?.historico.length && <div className="text-xs text-ink-60 mt-1.5">{q.data.historico.length} documento{q.data.historico.length > 1 ? 's' : ''} anterior{q.data.historico.length > 1 ? 'es' : ''} no histórico</div>}
       {dlg && <DocumentoDialog linha={dlg.linha} modo={dlg.modo} colaborador={{ id, nome }} onClose={() => setDlg(null)} />}
-    </div>
+    </Seccao>
   )
 }
 

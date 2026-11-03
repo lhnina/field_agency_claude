@@ -40,7 +40,7 @@ const BASE = 'http://localhost:5173'
   // 5) ficha do colaborador
   await p.goto(BASE + '/colaboradores'); await p.getByRole('link', { name: 'Marco Dias' }).click().catch(async () => { await p.getByText('Marco Dias').first().click() })
   await p.waitForTimeout(800)
-  console.log('ficha:', (await p.locator('div.border-t:has(> div > div:text("Credenciais"))').innerText()).replace(/\s+/g, ' '))
+  console.log('ficha:', (await p.locator('div.border-t:has(button[aria-expanded]:has-text("Credenciais"))').innerText()).replace(/\s+/g, ' '))
   // 6) parâmetros
   await p.goto(BASE + '/login'); await p.evaluate(() => localStorage.clear())
   await p.goto(BASE + '/login'); await p.fill('input[type=email]', 'marta@promovida.pt'); await p.fill('input[type=password]', 'demo1234'); await p.click('button[type=submit]'); await p.waitForURL(BASE + '/')

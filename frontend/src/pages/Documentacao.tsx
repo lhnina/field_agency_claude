@@ -36,24 +36,27 @@ export default function Documentacao() {
 
 // ------------------------------------------------------------------ documentos
 function Documentos() {
-  const [sp] = useSearchParams()
+  const [sp, setSp] = useSearchParams()
+  const colaborador = sp.get('colaborador')
   const q = useQuery({ queryKey: ['documentos'], queryFn: () => api<{ linhas: SituacaoDoc[]; resumo: ResumoDoc }>('/documentos') })
   const tipos = useQuery({ queryKey: ['tipos-documento'], queryFn: () => api<TipoDocumento[]>('/tipos-documento') })
   const zonas = useQuery({ queryKey: ['zonas'], queryFn: () => api<IdNome[]>('/zonas') })
-  const [estado, setEstado] = useState<string>(sp.get('estado') ?? 'problemas')
+  const [estado, setEstado] = useState<string>(sp.get('estado') ?? (sp.get('colaborador') ? 'todos' : 'problemas'))
   const [tipo, setTipo] = useState('')
   const [zona, setZona] = useState('')
   const [texto, setTexto] = useState('')
   const [dlg, setDlg] = useState<{ linha: SituacaoDoc; modo: 'novo' | 'corrigir' } | null>(null)
 
   const linhas = useMemo(() => (q.data?.linhas ?? []).filter((l) => {
+    if (colaborador && String(l.colaborador_id) !== colaborador) return false
     if (estado === 'problemas' && !(l.obrigatorio && (l.estado === 'expirado' || l.estado === 'em_falta')) && l.estado !== 'a_expirar') return false
     if (estado !== 'problemas' && estado !== 'todos' && l.estado !== estado) return false
     if (tipo && String(l.tipo_documento_id) !== tipo) return false
     if (zona && l.zona !== zona) return false
     const t = texto.trim().toLowerCase()
     return !t || l.colaborador.toLowerCase().includes(t) || l.numero_colaborador.includes(t) || (l.documento?.numero ?? '').toLowerCase().includes(t)
-  }), [q.data, estado, tipo, zona, texto])
+  }), [q.data, estado, tipo, zona, texto, colaborador])
+  const nomeColab = colaborador ? q.data?.linhas.find((l) => String(l.colaborador_id) === colaborador)?.colaborador : null
 
   if (q.isLoading) return <Card><Loading /></Card>
   if (q.error || !q.data) return <ErrorBox error={q.error} />
@@ -78,6 +81,13 @@ function Documentos() {
           ))}
         </div>
         <div className="flex flex-wrap items-center gap-2 px-3.5 py-3 border-b border-line-soft">
+          {colaborador && (
+            <span className="inline-flex items-center gap-1.5 h-9 pl-3 pr-1.5 rounded-lg border border-petrol-600 bg-petrol-50 text-[13px] text-petrol-700">
+              Colaborador: <b className="font-semibold">{nomeColab ?? '…'}</b>
+              <button type="button" aria-label="Mostrar todos os colaboradores" title="Mostrar todos os colaboradores" className="p-1 rounded hover:bg-petrol-100"
+                onClick={() => { const n = new URLSearchParams(sp); n.delete('colaborador'); setSp(n) }}><Icon name="x" size={14} /></button>
+            </span>
+          )}
           <div className="relative">
             <Icon name="search" size={16} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-ink-60" />
             <input aria-label="Pesquisar" className="inp !pl-8 w-[220px]" placeholder="Colaborador, n.º ou documento" value={texto} onChange={(e) => setTexto(e.target.value)} />
@@ -140,9 +150,10 @@ export function TabelaDocs({ linhas, mostrarColaborador, onAcao }: { linhas: Sit
                 <Icon name="file" size={14} className="flex-none" /><span className="truncate">{d.ficheiro_nome}</span></button>
             ) : <span className="text-ink-60">—</span>}</td>
             <td className="text-right whitespace-nowrap">{regista && (d ? <>
-              <Button size="sm" variant="ghost" onClick={() => onAcao(l, 'corrigir')}>Corrigir</Button>
-              <Button size="sm" variant={l.estado === 'valido' ? 'ghost' : 'secondary'} onClick={() => onAcao(l, 'novo')}>Renovar</Button>
-            </> : <Button size="sm" variant="secondary" icon="plus" onClick={() => onAcao(l, 'novo')}>Registar</Button>)}</td>
+              <AcaoIcone icon="edit" label={`Corrigir ${l.tipo}`} onClick={() => onAcao(l, 'corrigir')} />
+              <AcaoIcone icon="sync" label={`Renovar ${l.tipo}`} onClick={() => onAcao(l, 'novo')}
+                className={l.estado === 'valido' ? '' : '!text-petrol-600 bg-petrol-50 hover:!bg-petrol-100'} />
+            </> : <AcaoIcone icon="plus" label={`Registar ${l.tipo}`} onClick={() => onAcao(l, 'novo')} className="!text-petrol-600 bg-petrol-50 hover:!bg-petrol-100" />)}</td>
           </tr>
         )
       })}</tbody>
@@ -271,7 +282,7 @@ function TipoDialog({ t, onClose }: { t: TipoDocumento | null; onClose: () => vo
 // ------------------------------------------------------------------ requisitos
 function Requisitos() {
   const q = useQuery({ queryKey: ['requisitos'], queryFn: () => api<Requisito[]>('/requisitos-documentais') })
-  const [novo, setNovo] = useState(false)
+  const [novo, setNovo] = useState<Requisito | 'novo' | null>(null)
   const qc = useQueryClient()
   const toast = useToast()
   const remover = useMutation({
@@ -286,7 +297,7 @@ function Requisitos() {
           <h3 className="text-[14.5px] font-semibold">Documentos obrigatórios</h3>
           <span className="text-[12.5px] text-ink-60">a quem se aplica cada documento</span>
           <span className="flex-1" />
-          {cfg && <Button size="sm" variant="primary" icon="plus" onClick={() => setNovo(true)}>Novo requisito</Button>}
+          {cfg && <Button size="sm" variant="primary" icon="plus" onClick={() => setNovo('novo')}>Novo requisito</Button>}
         </div>
         {q.isLoading ? <Loading /> : !q.data?.length ? <Empty title="Sem requisitos">Sem requisitos, nenhum documento é obrigatório.</Empty> : (
           <table className="tbl">
@@ -297,7 +308,7 @@ function Requisitos() {
                 <td>{r.funcao ?? <span className="text-ink-60">Qualquer</span>}</td>
                 <td>{r.cliente ?? <span className="text-ink-60">Qualquer</span>}</td>
                 <td>{r.insignia ?? <span className="text-ink-60">Qualquer</span>}</td>
-                <td className="text-right">{cfg && <AcaoIcone icon="trash" tom="perigo" label={`Remover requisito ${r.tipo}`} loading={remover.isPending && remover.variables?.id === r.id} onClick={() => remover.mutate(r)} />}</td>
+                <td className="text-right whitespace-nowrap">{cfg && <AcaoIcone icon="edit" label={`Editar requisito ${r.tipo}`} onClick={() => setNovo(r)} />}{cfg && <AcaoIcone icon="trash" tom="perigo" label={`Remover requisito ${r.tipo}`} loading={remover.isPending && remover.variables?.id === r.id} onClick={() => remover.mutate(r)} />}</td>
               </tr>
             ))}</tbody>
           </table>
@@ -305,24 +316,25 @@ function Requisitos() {
       </Card>
       <p className="text-[12.5px] text-ink-60 flex gap-1.5"><Icon name="alert" size={14} className="mt-0.5" />
         «Qualquer» quer dizer que esse critério não restringe. Um requisito só com o documento aplica-se a todos os colaboradores; com cliente ou cadeia, aplica-se a quem presta serviço nesse cliente ou nessa cadeia.</p>
-      {novo && <RequisitoDialog onClose={() => setNovo(false)} />}
+      {novo && <RequisitoDialog r={novo === 'novo' ? null : novo} onClose={() => setNovo(null)} />}
     </>
   )
 }
 
-function RequisitoDialog({ onClose }: { onClose: () => void }) {
+function RequisitoDialog({ r, onClose }: { r: Requisito | null; onClose: () => void }) {
   const qc = useQueryClient()
   const toast = useToast()
   const tipos = useQuery({ queryKey: ['tipos-documento'], queryFn: () => api<TipoDocumento[]>('/tipos-documento') })
   const funcoes = useQuery({ queryKey: ['funcoes'], queryFn: () => api<IdNome[]>('/funcoes') })
   const clientes = useQuery({ queryKey: ['clientes'], queryFn: () => api<IdNome[]>('/clientes') })
   const insignias = useQuery({ queryKey: ['insignias'], queryFn: () => api<IdNome[]>('/insignias') })
-  const [f, setF] = useState({ tipo_documento_id: '', funcao: '', cliente_id: '', insignia_id: '' })
+  const [f, setF] = useState({ tipo_documento_id: r ? String(r.tipo_documento_id) : '', funcao: r?.funcao ?? '',
+    cliente_id: r?.cliente_id ? String(r.cliente_id) : '', insignia_id: r?.insignia_id ? String(r.insignia_id) : '' })
   const m = useMutation({
-    mutationFn: () => api('/requisitos-documentais', { method: 'POST', body: {
+    mutationFn: () => api(r ? `/requisitos-documentais/${r.id}` : '/requisitos-documentais', { method: r ? 'PUT' : 'POST', body: {
       tipo_documento_id: Number(f.tipo_documento_id), funcao: f.funcao || null,
       cliente_id: f.cliente_id ? Number(f.cliente_id) : null, insignia_id: f.insignia_id ? Number(f.insignia_id) : null } }),
-    onSuccess: () => { ['requisitos', 'documentos', 'tipos-documento', 'planeamento'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); toast('Requisito criado'); onClose() },
+    onSuccess: () => { ['requisitos', 'documentos', 'tipos-documento', 'planeamento'].forEach((k) => qc.invalidateQueries({ queryKey: [k] })); toast(r ? 'Requisito atualizado' : 'Requisito criado'); onClose() },
   })
   const sel = (k: keyof typeof f, label: string, ops: { v: string; l: string }[], vazio = 'Qualquer') => (
     <Field label={label}>{(id) => (
@@ -331,8 +343,8 @@ function RequisitoDialog({ onClose }: { onClose: () => void }) {
       </select>)}</Field>
   )
   return (
-    <Modal title="Novo requisito documental" onClose={onClose}
-      footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" loading={m.isPending} disabled={!f.tipo_documento_id} onClick={() => m.mutate()}>Criar</Button></>}>
+    <Modal title={r ? 'Editar requisito documental' : 'Novo requisito documental'} onClose={onClose}
+      footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" loading={m.isPending} disabled={!f.tipo_documento_id} onClick={() => m.mutate()}>{r ? 'Guardar' : 'Criar'}</Button></>}>
       <div className="grid grid-cols-2 gap-3.5">
         <div className="col-span-2">{sel('tipo_documento_id', 'Documento obrigatório', (tipos.data ?? []).map((t) => ({ v: String(t.id), l: t.nome })), 'Escolher…')}</div>
         {sel('funcao', 'Para a função', (funcoes.data ?? []).map((x) => ({ v: x.nome, l: x.nome })))}

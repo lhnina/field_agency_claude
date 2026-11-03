@@ -13,7 +13,7 @@ const BASE = 'http://localhost:5173'
   await p.screenshot({ path: '/tmp/shots/doc-pendencias.png' })
   // registar o CC do Tiago com anexo
   const linha = p.locator('tr:has-text("Tiago Moreira"):has-text("Doc. de Identificação")')
-  await linha.getByRole('button', { name: 'Registar' }).click(); await p.getByRole('dialog').waitFor()
+  await linha.getByRole('button', { name: /^Registar/ }).click(); await p.getByRole('dialog').waitFor()
   await p.getByLabel('Número / referência').fill('15328877')
   await p.getByLabel('Válido até').fill('15/03/2031'); await p.getByLabel('Válido até').press('Tab')
   await p.setInputFiles('input[type=file]', '/tmp/cc-tiago.pdf')
@@ -44,7 +44,8 @@ const BASE = 'http://localhost:5173'
   await p.goto(BASE + '/colaboradores?id=' + await p.evaluate(async () => {
     const r = await fetch('/api/colaboradores?q=Jo%C3%A3o', { headers: { Authorization: 'Bearer ' + localStorage.getItem('fa.token') } }); return (await r.json())[0].id }))
   await p.waitForSelector('text=Documentação'); await p.waitForTimeout(600)
-  const sec = p.locator('div.border-t:has(> div > div:text("Documentação"))')
+  await p.getByRole('button', { name: /^Documentação/ }).click()  // abre a secção
+  const sec = p.locator('div.border-t:has(button[aria-expanded]:has-text("Documentação"))')
   console.log('ficha João:', (await sec.innerText()).replace(/\s+/g, ' ').slice(0, 220))
   await p.screenshot({ path: '/tmp/shots/doc-ficha.png' })
   // planeamento

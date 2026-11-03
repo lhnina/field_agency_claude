@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AcaoIcone, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, useToast } from '../components/ui'
+import { AcaoIcone, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, Seccao, useToast } from '../components/ui'
 import { DataInput } from '../components/DataInput'
 import { ColaboradorPicker } from '../components/ColaboradorPicker'
 import { api, apiForm, descarregar, session } from '../lib/api'
@@ -227,13 +227,8 @@ export function CredenciaisColaborador({ id, nome }: { id: number; nome: string 
   const q = useQuery({ queryKey: ['credenciais', 'colaborador', id], queryFn: () => api<CredencialT[]>('/credenciais', { params: { colaborador_id: id } }) })
   const vigor = (q.data ?? []).filter((c) => c.estado === 'emitida')
   return (
-    <div className="px-[18px] py-3.5 border-t border-line-soft">
-      <div className="flex items-center gap-2 mb-2">
-        <div className="text-[13px] font-semibold">Credenciais</div>
-        <span className="text-[12.5px] text-ink-60">{vigor.length} em vigor</span>
-        <span className="flex-1" />
-        {podeEmitir() && <Button size="sm" icon="plus" onClick={() => setNova(true)}>Emitir</Button>}
-      </div>
+    <Seccao titulo="Credenciais" resumo={<span className="text-[12.5px] text-ink-60">{vigor.length} em vigor</span>}
+      acao={podeEmitir() ? <Button size="sm" variant="subtil" icon="plus" onClick={() => setNova(true)}>Emitir</Button> : undefined}>
       {!q.data?.length ? <div className="text-[12.5px] text-ink-60">Sem credenciais emitidas.</div> : (
         <ul className="flex flex-col gap-1.5">
           {q.data.slice(0, 6).map((c) => (
@@ -248,7 +243,7 @@ export function CredenciaisColaborador({ id, nome }: { id: number; nome: string 
         </ul>
       )}
       {nova && <NovaCredencialDialog colaborador={{ id, nome }} onClose={() => setNova(false)} />}
-    </div>
+    </Seccao>
   )
 }
 

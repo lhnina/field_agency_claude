@@ -102,3 +102,18 @@ def test_anexo_guardado_descarregado_com_registo_e_ambito(client, mundo):
     assert client.post(f"/api/colaboradores/{mundo.pedro.id}/documentos", headers=hs1,
                        data={"tipo_documento_id": cc["id"], "validade": "2030-01-01"}).status_code == 201
     assert mundo.db.scalar(select(DocumentoColaborador).where(DocumentoColaborador.colaborador_id == mundo.pedro.id))
+
+
+def test_editar_requisito(client, mundo):
+    from app.models import TipoDocumento
+    t1, t2 = TipoDocumento(tenant_id=mundo.t.id, nome="HACCP"), TipoDocumento(tenant_id=mundo.t.id, nome="Registo criminal")
+    mundo.db.add_all([t1, t2])
+    mundo.db.commit()
+    h = token(client, "g@t.pt")
+    a = client.post("/api/requisitos-documentais", headers=h, json={"tipo_documento_id": t1.id}).json()
+    b = client.post("/api/requisitos-documentais", headers=h, json={"tipo_documento_id": t2.id}).json()
+    r = client.put(f"/api/requisitos-documentais/{a['id']}", headers=h, json={"tipo_documento_id": t1.id, "cliente_id": mundo.cliente.id})
+    assert r.status_code == 200 and r.json()["cliente"] == "Bom Grão Cafés"
+    # não pode ficar igual a outro requisito existente
+    assert client.put(f"/api/requisitos-documentais/{a['id']}", headers=h, json={"tipo_documento_id": t2.id}).status_code == 409
+    assert b["id"]

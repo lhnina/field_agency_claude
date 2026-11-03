@@ -107,8 +107,7 @@ def requisitos(user: User = Depends(requer("colaboradores.ler")), db: Session = 
     return sorted((_req_json(r) for r in db.scalars(q).all()), key=lambda r: (r["tipo"], r["aplica_se"]))
 
 
-@router.post("/requisitos-documentais", status_code=201)
-def criar_requisito(body: RequisitoIn, user: User = Depends(requer("documentos.configurar")), db: Session = Depends(get_db)):
+def _validar_requisito(db: Session, user: User, body: RequisitoIn, exceto: int | None = None) -> str | None:
     obter(db, TipoDocumento, body.tipo_documento_id, user)
     if body.cliente_id:
         db_cli = db.get(Cliente, body.cliente_id)
@@ -117,14 +116,22 @@ def criar_requisito(body: RequisitoIn, user: User = Depends(requer("documentos.c
     if body.insignia_id:
         obter(db, Insignia, body.insignia_id, user)
     funcao = garantir_funcao(db, user.tenant_id, body.funcao)
-    existe = db.scalar(select(RequisitoDocumental).where(
+    q = select(RequisitoDocumental).where(
         RequisitoDocumental.tenant_id == user.tenant_id, RequisitoDocumental.ativo.is_(True),
         RequisitoDocumental.tipo_documento_id == body.tipo_documento_id,
         (RequisitoDocumental.funcao == funcao) if funcao else RequisitoDocumental.funcao.is_(None),
         (RequisitoDocumental.cliente_id == body.cliente_id) if body.cliente_id else RequisitoDocumental.cliente_id.is_(None),
-        (RequisitoDocumental.insignia_id == body.insignia_id) if body.insignia_id else RequisitoDocumental.insignia_id.is_(None)))
-    if existe:
+        (RequisitoDocumental.insignia_id == body.insignia_id) if body.insignia_id else RequisitoDocumental.insignia_id.is_(None))
+    if exceto:
+        q = q.where(RequisitoDocumental.id != exceto)
+    if db.scalar(q):
         raise HTTPException(409, "Este requisito já existe")
+    return funcao
+
+
+@router.post("/requisitos-documentais", status_code=201)
+def criar_requisito(body: RequisitoIn, user: User = Depends(requer("documentos.configurar")), db: Session = Depends(get_db)):
+    funcao = _validar_requisito(db, user, body)
     r = RequisitoDocumental(tenant_id=user.tenant_id, tipo_documento_id=body.tipo_documento_id, funcao=funcao,
                             cliente_id=body.cliente_id, insignia_id=body.insignia_id)
     db.add(r)
@@ -132,6 +139,19 @@ def criar_requisito(body: RequisitoIn, user: User = Depends(requer("documentos.c
     op.auditar(db, user, "requisito_documental", r.id, "criar", body.model_dump())
     db.commit()
     db.refresh(r)
+    return _req_json(r)
+
+
+@router.put("/requisitos-documentais/{rid}")
+def editar_requisito(rid: int, body: RequisitoIn, user: User = Depends(requer("documentos.configurar")), db: Session = Depends(get_db)):
+    r = obter(db, RequisitoDocumental, rid, user)
+    funcao = _validar_requisito(db, user, body, exceto=r.id)
+    antes = _req_json(r)
+    r.tipo_documento_id, r.funcao, r.cliente_id, r.insignia_id = body.tipo_documento_id, funcao, body.cliente_id, body.insignia_id
+    db.flush()
+    db.refresh(r)
+    op.auditar(db, user, "requisito_documental", r.id, "editar", {"antes": antes, "depois": _req_json(r)})
+    db.commit()
     return _req_json(r)
 
 
