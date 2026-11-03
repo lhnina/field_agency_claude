@@ -192,3 +192,28 @@ def test_so_contratos_em_curso_aparecem_no_planeamento(mundo):
     mundo.contrato.estado = EstadoContrato.ativo  # retomar: as ocorrências mantêm-se
     mundo.db.flush()
     assert op.planeamento_semana(mundo.db, mundo.gestor, SEG, op.FiltroPlaneamento())["ocorrencias"]
+
+
+def test_data_de_saida_termina_afetacoes_e_desativa(mundo):
+    import pytest
+    hoje = date.today()
+    ln = nova_linha(mundo, [4, 4, 4, 4, 4, 0, 0], inicio=hoje - timedelta(days=14))
+    op.afetar(mundo.db, mundo.gestor, ln, mundo.ines, hoje - timedelta(days=14))
+    op.gerar_ocorrencias(mundo.db, ln, ate=hoje + timedelta(days=20))
+    # saída futura: afetação termina nessa data, os serviços seguintes ficam por atribuir, continua ativa
+    mundo.ines.data_saida = hoje + timedelta(days=5)
+    r = op.aplicar_saida(mundo.db, mundo.gestor, mundo.ines)
+    assert r["afetacoes"] == 1 and r["servicos"] > 0 and not r["desativado"] and mundo.ines.ativo
+    depois = [o for o in ocs(mundo, ln) if o.data > mundo.ines.data_saida]
+    antes = [o for o in ocs(mundo, ln) if hoje <= o.data <= mundo.ines.data_saida]
+    assert depois and all(o.colaborador_id is None for o in depois)
+    assert all(o.colaborador_id == mundo.ines.id for o in antes)
+    # não pode ser afeta nem substituir depois da saída
+    with pytest.raises(ValueError):
+        op.afetar(mundo.db, mundo.gestor, ln, mundo.ines, hoje + timedelta(days=6))
+    with pytest.raises(ValueError):
+        op.substituir(mundo.db, mundo.gestor, depois[0], mundo.ines.id, "teste")
+    # saída passada: desativa
+    mundo.ines.data_saida = hoje - timedelta(days=1)
+    op.aplicar_saidas(mundo.db, mundo.t.id)
+    assert not mundo.ines.ativo

@@ -22,7 +22,7 @@ export type Colaborador = {
   vinculo: Vinculo; muito_curta_duracao: boolean; data_admissao: string | null; data_saida: string | null
   data_inicio: string | null; data_fim_vinculo: string | null; zona_id: number | null
   supervisor_id: number | null; custo_hora: string; disponibilidade: string; ativo: boolean; zona: IdNome | null
-  horas_afetadas: string
+  horas_afetadas: string; aviso?: string | null
   data_nascimento: string | null; numero_identificacao: string | null; niss: string | null
 }
 

@@ -28,6 +28,8 @@ def _scope(s, user: User):
 @router.get("/colaboradores", response_model=list[ColaboradorOut])
 def listar(q: str | None = None, vinculo: str | None = None, zona_id: int | None = None, inativos: bool = False,
            limite: int | None = None, user: User = Depends(requer("colaboradores.ler")), db: Session = Depends(get_db)):
+    op.aplicar_saidas(db, user.tenant_id)
+    db.commit()
     s = _scope(select(Colaborador).where(Colaborador.tenant_id == user.tenant_id), user)
     if not inativos:
         s = s.where(Colaborador.ativo.is_(True))
@@ -112,6 +114,8 @@ def criar(body: ColaboradorIn, user: User = Depends(requer("colaboradores.editar
     body.funcao = garantir_funcao(db, user.tenant_id, body.funcao)
     c = Colaborador(tenant_id=user.tenant_id, **body.model_dump())
     db.add(c)
+    db.flush()
+    op.aplicar_saida(db, user, c)
     db.commit()
     db.refresh(c)
     return c
@@ -126,9 +130,20 @@ def editar(cid: int, body: ColaboradorIn, user: User = Depends(requer("colaborad
     for k, v in body.model_dump().items():
         setattr(c, k, v)
     op.auditar(db, user, "colaborador", c.id, "editar", {"antes": antes, "depois": body.model_dump()})
+    r = op.aplicar_saida(db, user, c)
     db.commit()
     db.refresh(c)
-    return c
+    out = ColaboradorOut.model_validate(c)
+    out.horas_afetadas = _carga(db, [c.id]).get(c.id, Decimal("0"))
+    partes = []
+    if r["afetacoes"]:
+        partes.append(f"{r['afetacoes']} afetação(ões) terminada(s) a {c.data_saida.strftime('%d/%m/%Y')}")
+    if r["servicos"]:
+        partes.append(f"{r['servicos']} serviço(s) depois da saída ficaram por atribuir")
+    if r["desativado"]:
+        partes.append("colaborador desativado")
+    out.aviso = "; ".join(partes) or None
+    return out
 
 
 @router.post("/colaboradores/{cid}/estado", response_model=ColaboradorOut)
@@ -145,6 +160,8 @@ def estado(cid: int, body: EstadoAtivoIn, user: User = Depends(requer("colaborad
         if afet or futuras:
             raise HTTPException(422, f"O colaborador está afeto a {afet} loja(s) e tem {futuras} substituição(ões) futura(s): "
                                      "reafete-as antes de o desativar")
+    if body.ativo and c.data_saida and c.data_saida < date.today():
+        raise HTTPException(422, f"Saiu a {c.data_saida.strftime('%d/%m/%Y')}: retire ou altere a data de saída na ficha para o reativar")
     if c.ativo != body.ativo:
         c.ativo = body.ativo
         op.auditar(db, user, "colaborador", c.id, "reativar" if body.ativo else "desativar", None)

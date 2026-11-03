@@ -137,3 +137,17 @@ def test_colaborador_datas_laborais_e_muito_curta_duracao(client, mundo):
     c = mundo.db.get(Colaborador, cid)
     assert not c.muito_curta_duracao and c.data_admissao is None and c.data_inicio is None and c.data_fim_vinculo is None
     assert client.post("/api/colaboradores", headers=h, json={**body, "numero": "89", "vinculo": "muito_curta_duracao"}).status_code == 422
+
+
+def test_saida_passada_desativa_e_bloqueia_reativar(client, mundo):
+    from datetime import timedelta
+    mundo.db.commit()
+    h = token(client, "g@t.pt")
+    cid = mundo.outro.id
+    body = client.get(f"/api/colaboradores/{cid}", headers=h).json()
+    ontem = (date.today() - timedelta(days=1)).isoformat()
+    r = client.put(f"/api/colaboradores/{cid}", headers=h, json={**body, "data_admissao": "2025-01-01", "data_saida": ontem})
+    assert r.status_code == 200 and r.json()["ativo"] is False and "desativado" in r.json()["aviso"]
+    assert client.post(f"/api/colaboradores/{cid}/estado", headers=h, json={"ativo": True}).status_code == 422
+    r = client.put(f"/api/colaboradores/{cid}", headers=h, json={**r.json(), "data_saida": None})
+    assert client.post(f"/api/colaboradores/{cid}/estado", headers=h, json={"ativo": True}).json()["ativo"] is True

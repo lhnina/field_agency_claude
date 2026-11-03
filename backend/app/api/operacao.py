@@ -24,6 +24,8 @@ def planeamento(inicio: date | None = None, zona_id: int | None = None, cliente_
                 user: User = Depends(requer("planeamento.ler")), db: Session = Depends(get_db)):
     d = inicio or date.today()
     segunda = d - timedelta(days=d.weekday())
+    op.aplicar_saidas(db, user.tenant_id)
+    db.commit()
     return op.planeamento_semana(db, user, segunda, op.FiltroPlaneamento(
         zona_id, cliente_id, supervisor_id, tipo, [colaborador_id] if colaborador_id else []))
 

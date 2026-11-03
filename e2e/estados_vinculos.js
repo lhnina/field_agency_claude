@@ -23,6 +23,14 @@ const BASE = 'http://localhost:5173'
   await p.screenshot({ path: '/tmp/shots/colab-form-rv.png' })
   await d.getByLabel('Vínculo').selectOption('a_termo'); await d.getByLabel('Muito curta duração').check()
   await d.getByRole('button', { name: 'Guardar' }).click(); await p.waitForSelector('text=Ficha atualizada')
+  // --- data de saída: termina afetações e avisa
+  await p.getByText('Inês Carvalho').first().click(); await p.waitForTimeout(400)
+  await p.getByRole('button', { name: 'Editar', exact: true }).first().click(); await p.getByRole('dialog').waitFor()
+  const dd = new Date(Date.now() + 7 * 864e5); const saida = `${String(dd.getDate()).padStart(2, '0')}/${String(dd.getMonth() + 1).padStart(2, '0')}/${dd.getFullYear()}`
+  await p.getByRole('dialog').getByLabel('Data de saída').fill(saida); await p.getByRole('dialog').getByLabel('Data de saída').press('Enter')
+  await p.screenshot({ path: '/tmp/shots/colab-saida.png' })
+  await p.getByRole('dialog').getByRole('button', { name: 'Guardar' }).click()
+  console.log('aviso saída:', await (await p.waitForSelector('text=/afetação/')).innerText())
   // --- contratos: estados
   await p.goto(BASE + '/contratos'); await p.waitForSelector('table.tbl tbody tr')
   console.log('estados na grelha:', [...new Set((await p.locator('table.tbl tbody tr td:nth-child(3)').allInnerTexts()).map((t) => t.trim()))].join(', '))

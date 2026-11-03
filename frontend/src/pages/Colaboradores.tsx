@@ -261,7 +261,7 @@ function ColabDialog({ c, onClose }: { c: Colaborador | null; onClose: () => voi
         custo_hora: Number(String(f.custo_hora).replace(',', '.')) || 0, ativo: c?.ativo ?? true,
         data_nascimento: f.data_nascimento || null, numero_identificacao: f.numero_identificacao.trim() || null, niss: f.niss.trim() || null },
     }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['colaboradores'] }); toast(c ? 'Ficha atualizada' : 'Colaborador criado'); onClose() },
+    onSuccess: (r) => { qc.invalidateQueries({ queryKey: ['colaboradores'] }); qc.invalidateQueries({ queryKey: ['planeamento'] }); toast((c ? 'Ficha atualizada' : 'Colaborador criado') + (r.aviso ? ` · ${r.aviso}` : '')); onClose() },
   })
   return (
     <Modal title={c ? `Editar ${c.nome}` : 'Novo colaborador'} onClose={onClose} width={620}
@@ -292,7 +292,7 @@ function ColabDialog({ c, onClose }: { c: Colaborador | null; onClose: () => voi
                 onChange={(e) => setF({ ...f, muito_curta_duracao: e.target.checked })} />Muito curta duração</label>
           </div>
           <Field label="Data de admissão">{(id) => <DataInput id={id} limpar disabled={rv} value={rv ? '' : f.data_admissao} onChange={(v) => setF({ ...f, data_admissao: v })} />}</Field>
-          <Field label="Data de saída">{(id) => <DataInput id={id} limpar disabled={rv} value={rv ? '' : f.data_saida} min={f.data_admissao || undefined} onChange={(v) => setF({ ...f, data_saida: v })} />}</Field>
+          <Field label="Data de saída" hint="Termina as afetações nesta data; no dia seguinte fica inativo">{(id) => <DataInput id={id} limpar disabled={rv} value={rv ? '' : f.data_saida} min={f.data_admissao || undefined} onChange={(v) => setF({ ...f, data_saida: v })} />}</Field>
           <Field label="Início do contrato">{(id) => <DataInput id={id} limpar disabled={rv} value={rv ? '' : f.data_inicio} onChange={(v) => setF({ ...f, data_inicio: v })} />}</Field>
           <Field label="Fim do contrato" hint={f.muito_curta_duracao && mcdPossivel ? 'Máx. 35 dias seguidos' : undefined}>{(id) => <DataInput id={id} limpar disabled={rv} value={rv ? '' : f.data_fim_vinculo} min={f.data_inicio || undefined} onChange={(v) => setF({ ...f, data_fim_vinculo: v })} />}</Field>
         </div>

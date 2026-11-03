@@ -240,7 +240,9 @@ def atribuir(sid: int, body: AtribuirIn, user: User = Depends(requer("planeament
             raise HTTPException(422, "A viatura está inativa")
     for cid in (body.colaborador_id, body.ajudante_id):
         if cid:
-            obter(db, Colaborador, cid, user)
+            col = obter(db, Colaborador, cid, user)
+            if op.saiu(col, s.data):
+                raise HTTPException(422, f"{col.nome} sai a {col.data_saida.strftime('%d/%m/%Y')}: não pode fazer serviços depois dessa data")
     if body.ajudante_id and body.ajudante_id == body.colaborador_id:
         raise HTTPException(422, "O ajudante não pode ser o próprio motorista")
     antes = {"viatura_id": s.viatura_id, "colaborador_id": s.colaborador_id, "ajudante_id": s.ajudante_id}
@@ -268,6 +270,8 @@ def candidatos(sid: int, user: User = Depends(requer("planeamento.ler")), db: Se
         qc = qc.where(Colaborador.zona_id == zona)
     colabs = []
     for c in db.scalars(qc.order_by(Colaborador.nome)).all():
+        if op.saiu(c, s.data):
+            continue
         alert = []
         if ctx.ausente(c.id, s.data):
             alert.append("Ausente")

@@ -143,6 +143,11 @@ def afetar(db: Session, user: User, linha: LinhaContrato, colaborador: Colaborad
     (por defeito até ao fim). Fecha a afetação anterior e atualiza as ocorrências."""
     if ate is not None and ate < desde:
         raise ValueError("A data de fim é anterior à data de início")
+    if colaborador.data_saida is not None:
+        if desde > colaborador.data_saida:
+            raise ValueError(f"{colaborador.nome} sai a {_dm(colaborador.data_saida)}: não pode ser afeto depois dessa data")
+        if ate is None or ate > colaborador.data_saida:
+            ate = colaborador.data_saida  # a afetação termina na data de saída
     for a in list(linha.afetacoes):
         if a.desde >= desde and (ate is None or a.desde <= ate):
             linha.afetacoes.remove(a)
@@ -180,6 +185,79 @@ def afetar(db: Session, user: User, linha: LinhaContrato, colaborador: Colaborad
     return nova
 
 
+# ------------------------------------------------------------------ saída do colaborador
+def saiu(c: Colaborador, d: date) -> bool:
+    """Depois da data de saída o colaborador já não trabalha (o próprio dia ainda conta)."""
+    return c.data_saida is not None and d > c.data_saida
+
+
+def _dm(d: date) -> str:
+    return d.strftime("%d/%m/%Y")
+
+
+def aplicar_saida(db: Session, user: User | None, c: Colaborador) -> dict:
+    """Com data de saída: termina as afetações nessa data, retira-o das substituições e dos
+    serviços de logística por executar depois dela e, passada a data, desativa-o.
+    Nada é apagado: as ocorrências ficam por atribuir no planeamento."""
+    from app.models import EstadoServicoLog, ServicoLogistico  # import local: evita ciclo
+    res = {"afetacoes": 0, "servicos": 0, "desativado": False}
+    if c.data_saida is None:
+        return res
+    depois = c.data_saida + timedelta(days=1)
+    linhas = db.scalars(select(LinhaContrato).join(Afetacao).where(
+        Afetacao.colaborador_id == c.id, or_(Afetacao.ate.is_(None), Afetacao.ate > c.data_saida))).unique().all()
+    for ln in linhas:
+        for a in list(ln.afetacoes):
+            if a.colaborador_id != c.id:
+                continue
+            if a.desde > c.data_saida:
+                ln.afetacoes.remove(a)
+                db.delete(a)
+                res["afetacoes"] += 1
+            elif a.ate is None or a.ate > c.data_saida:
+                a.ate = c.data_saida
+                res["afetacoes"] += 1
+        db.flush()
+        for o in db.scalars(select(Ocorrencia).where(
+                Ocorrencia.linha_id == ln.id, Ocorrencia.data >= depois, Ocorrencia.estado.in_(EDITAVEIS),
+                Ocorrencia.colaborador_previsto_id == c.id)).all():
+            o.colaborador_previsto_id = None
+            o.estado = EstadoOcorrencia.planeado if o.colaborador_efetivo_id is None else o.estado
+            res["servicos"] += 1
+    for o in db.scalars(select(Ocorrencia).where(
+            Ocorrencia.colaborador_efetivo_id == c.id, Ocorrencia.data >= depois, Ocorrencia.estado.in_(EDITAVEIS))).all():
+        o.colaborador_efetivo_id = None
+        o.motivo_alteracao = None
+        o.estado = EstadoOcorrencia.atribuido if o.colaborador_previsto_id else EstadoOcorrencia.planeado
+        res["servicos"] += 1
+    pend = (EstadoServicoLog.planeado, EstadoServicoLog.atribuido)
+    for s in db.scalars(select(ServicoLogistico).where(
+            ServicoLogistico.data >= depois, ServicoLogistico.estado.in_(pend),
+            or_(ServicoLogistico.colaborador_id == c.id, ServicoLogistico.ajudante_id == c.id))).all():
+        if s.colaborador_id == c.id:
+            s.colaborador_id = None
+            s.estado = EstadoServicoLog.planeado
+        if s.ajudante_id == c.id:
+            s.ajudante_id = None
+        res["servicos"] += 1
+    if c.ativo and c.data_saida < date.today():
+        c.ativo = False
+        res["desativado"] = True
+    if res["afetacoes"] or res["servicos"] or res["desativado"]:
+        auditar(db, user, "colaborador", c.id, "saida", {"data_saida": c.data_saida, **res}, tenant_id=c.tenant_id)
+    db.flush()
+    return res
+
+
+def aplicar_saidas(db: Session, tenant_id: int) -> None:
+    """Desativa quem já saiu (corre ao abrir colaboradores e planeamento)."""
+    db.flush()
+    for c in db.scalars(select(Colaborador).where(
+            Colaborador.tenant_id == tenant_id, Colaborador.ativo.is_(True),
+            Colaborador.data_saida.is_not(None), Colaborador.data_saida < date.today())).all():
+        aplicar_saida(db, None, c)
+
+
 def remover_afetacao(db: Session, user: User, linha: LinhaContrato, desde: date) -> None:
     """Termina a afetação em vigor a partir de `desde`: as ocorrências ficam por atribuir."""
     for a in list(linha.afetacoes):
@@ -202,6 +280,10 @@ def substituir(db: Session, user: User, o: Ocorrencia, colaborador_id: int | Non
         raise ValueError("Esta ocorrência já foi executada ou validada e não pode ser alterada")
     verificar_editavel(db, o)
     antes = o.colaborador_id
+    if colaborador_id:
+        novo = db.get(Colaborador, colaborador_id)
+        if novo and saiu(novo, o.data):
+            raise ValueError(f"{novo.nome} sai a {_dm(novo.data_saida)}: não pode fazer serviços depois dessa data")
     if colaborador_id is None or colaborador_id == o.colaborador_previsto_id:
         o.colaborador_efetivo_id = None
         o.motivo_alteracao = None
@@ -271,7 +353,7 @@ def candidatos(db: Session, o: Ocorrencia, limite: int = 8) -> list[dict]:
     ctx_doc = dc.contexto(db, o.tenant_id)
     res = []
     for c in db.scalars(select(Colaborador).where(Colaborador.tenant_id == o.tenant_id, Colaborador.ativo.is_(True))).all():
-        if c.id == o.colaborador_id:
+        if c.id == o.colaborador_id or saiu(c, o.data):
             continue
         motivos, pontos, bloqueios = [], 0, []
         if c.id in ausentes:
