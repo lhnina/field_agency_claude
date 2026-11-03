@@ -18,17 +18,19 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen grid place-items-center bg-bg p-6">
-      <form onSubmit={submit} className="card w-full max-w-[400px] p-7 flex flex-col gap-4">
-        <div className="flex flex-col items-center gap-1 mb-2">
-          <img src={logo} alt="Argos" className="h-32 w-auto" />
-          <div className="text-[12.5px] text-ink-60">Gestão operacional de agências de field marketing</div>
-        </div>
+    <div className="min-h-screen grid place-items-center bg-petrol-900 p-6">
+      <div className="w-full max-w-[400px] flex flex-col items-center gap-6">
+      <div className="flex flex-col items-center gap-3">
+        <img src={logo} alt="Argos" className="h-40 w-auto" />
+        <div className="text-[13px] text-[#93AAA6]">Gestão operacional de agências de field marketing</div>
+      </div>
+      <form onSubmit={submit} className="card w-full p-7 flex flex-col gap-4">
         <Field label="Email">{(id) => <input id={id} className="inp" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required />}</Field>
         <Field label="Palavra-passe">{(id) => <input id={id} className="inp" type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} required />}</Field>
         {err ? <ErrorBox error={err} /> : null}
         <Button variant="primary" type="submit" loading={busy} className="mt-1">Entrar</Button>
       </form>
+      </div>
     </div>
   )
 }

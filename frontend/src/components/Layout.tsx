@@ -44,7 +44,7 @@ export default function Layout() {
     <div className="flex flex-wrap min-h-screen">
       <nav aria-label="Menu principal" className="flex-[1_0_248px] max-w-sidebar bg-petrol-900 text-[#C9D6D3] flex flex-col px-3 pt-[18px] pb-3.5">
         <div className="flex items-center gap-3 px-2 pb-3.5">
-          <div className="w-10 h-10 rounded-[10px] bg-[#F3F6F4] grid place-items-center flex-none"><img src={simbolo} alt="" className="w-8 h-8" /></div>
+          <img src={simbolo} alt="" className="w-11 h-11 flex-none" />
           <div className="leading-tight"><div className="text-white text-[17px] font-bold tracking-[.14em]">ARGOS</div><div className="text-xs text-[#93AAA6]">Gestão operacional</div></div>
         </div>
         {GRUPOS.map((g, i) => (
