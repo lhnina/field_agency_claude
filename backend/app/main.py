@@ -1,10 +1,24 @@
+from contextlib import asynccontextmanager
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import administracao, base, configuracao, contratos, financeiro, importacao, operacao, pessoas
 from app.config import settings
 
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    if settings.auto_migrate:
+        from alembic import command
+        from alembic.config import Config
+
+        command.upgrade(Config(str(Path(__file__).resolve().parent.parent / "alembic.ini")), "head")
+    yield
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Field Agency API",
     version="0.1.0",
     description="Gestão operacional de agências de field marketing: contratos, planeamento, execução e apuramentos.",

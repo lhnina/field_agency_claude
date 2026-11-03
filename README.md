@@ -42,6 +42,22 @@ Todos os utilizadores de demonstração usam a palavra-passe `demo1234`:
 | rui@promovida.pt / sara@promovida.pt | Supervisores; só veem a sua equipa |
 | admin@promovida.pt | Administrador |
 
+## Modo de desenvolvimento (alterações em direto)
+
+Para ver as alterações assim que o código muda, sem rebuild:
+
+```powershell
+docker compose down
+docker compose -f docker-compose.dev.yml up -d
+```
+
+Abra <http://localhost:5173>. Na primeira vez carregue os dados de demonstração com `docker compose -f docker-compose.dev.yml exec api python -m app.seed`.
+
+- **Frontend:** as alterações aparecem no browser de imediato, muitas vezes sem refresh.
+- **Backend:** recarrega em cerca de 2 segundos.
+- **Base de dados:** as migrações correm sozinhas.
+- Só é preciso repetir o comando com `--build` quando mudam as dependências (`requirements.txt` ou `package.json`).
+
 ## Desenvolvimento sem Docker
 
 ```bash

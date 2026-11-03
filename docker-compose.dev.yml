@@ -1,0 +1,51 @@
+# Modo de desenvolvimento: lê o código diretamente desta pasta e recarrega sozinho.
+#   docker compose -f docker-compose.dev.yml up -d      →  http://localhost:5173
+# Alterações ao frontend aparecem no browser de imediato; ao backend, em ~2 s.
+# Migrações da base de dados correm sozinhas quando a API recarrega.
+# Só é preciso voltar a correr o comando quando mudam dependências
+# (requirements.txt ou package.json): acrescente --build.
+name: field-agency
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: fieldagency
+      POSTGRES_USER: fieldagency
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-fieldagency}
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fieldagency"]
+      interval: 5s
+      retries: 10
+
+  api:
+    build: ./backend
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      FA_DATABASE_URL: postgresql+psycopg://fieldagency:${DB_PASSWORD:-fieldagency}@db:5432/fieldagency
+      FA_JWT_SECRET: ${JWT_SECRET:-mude-este-segredo-em-producao-com-32-caracteres}
+      FA_CORS_ORIGINS: '["http://localhost:5173"]'
+      FA_AUTO_MIGRATE: "true"
+      WATCHFILES_FORCE_POLLING: "true"   # o Windows não avisa o Docker de alterações: verifica por polling
+    volumes: ["./backend:/app"]
+    depends_on:
+      db: { condition: service_healthy }
+    ports: ["8000:8000"]
+
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    command: sh -c "npm install --no-audit --no-fund && npx vite --host 0.0.0.0 --port 5173"
+    environment:
+      VITE_API_PROXY: http://api:8000
+      VITE_POLLING: "true"
+    volumes:
+      - ./frontend:/app
+      - web_node_modules:/app/node_modules   # dependências ficam no Docker, não na pasta do Windows
+    depends_on: [api]
+    ports: ["5173:5173"]
+
+volumes:
+  pgdata:
+  web_node_modules:
