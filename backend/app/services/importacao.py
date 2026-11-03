@@ -131,7 +131,7 @@ MODELOS: dict[str, Modelo] = {
         Coluna("Supervisor", False, "rui@promovida.pt", "Email ou nome do utilizador supervisor"),
     ], ["Se a loja já existir (mesmo nome), é atualizada.", "Insígnias e zonas novas são criadas automaticamente."]),
     "colaboradores": Modelo("Colaboradores", [
-        Coluna("N.º", True, "0412"), Coluna("Nome", True, "Inês Carvalho"), Coluna("Função", False, "Repositora"),
+        Coluna("N.º", True, "0412"), Coluna("Nome", True, "Inês Carvalho"), Coluna("Função", False, "Repositor(a)"),
         Coluna("Vínculo", True, "A termo", lista=["Sem termo", "A termo", "Muito curta duração", "Recibos verdes"]),
         Coluna("Data de início", False, "03/02/2025", "dd/mm/aaaa (na muito curta duração: início do contrato atual)"),
         Coluna("Data de fim do vínculo", False, None, "dd/mm/aaaa"),
@@ -443,6 +443,9 @@ def _colaboradores(ctx: Contexto, rows, gravar: bool) -> Resultado:
             for col, attr in [("Função", "funcao"), ("Telemóvel", "telefone"), ("Email", "email")]:
                 v = _txt(r.get(col))
                 if v is not None:
+                    if attr == "funcao":
+                        from app.api.base import garantir_funcao
+                        v = garantir_funcao(ctx.db, ctx.T, v)
                     setattr(c, attr, v)
     return res
 

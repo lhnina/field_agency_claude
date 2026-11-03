@@ -14,7 +14,7 @@ const [erroXlsx, okXlsx, out = '/tmp/shots'] = process.argv.slice(2)
   await p.waitForURL('http://localhost:5173/')
   await p.goto('http://localhost:5173/importacao')
   await p.click('button:has-text("2 · Lojas")')
-  const [dl] = await Promise.all([p.waitForEvent('download'), p.click('button:has-text("Descarregar modelo Excel")')])
+  const [dl] = await Promise.all([p.waitForEvent('download'), p.getByRole('button', { name: 'Descarregar modelo Excel' }).click()])
   console.log('modelo:', dl.suggestedFilename())
 
   await p.setInputFiles('input[type=file]', erroXlsx)

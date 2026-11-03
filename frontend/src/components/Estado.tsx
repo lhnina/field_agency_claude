@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { api } from '../lib/api'
-import { Button, ErrorBox, Modal, useToast } from './ui'
+import { AcaoIcone, Button, ErrorBox, Modal, useToast } from './ui'
 
 /** Desativar/reativar um registo. Nada é apagado: fica inativo e mantém o histórico. */
-export function BotaoEstado({ url, ativo, nome, invalidar, size = 'sm' }: {
+export function BotaoEstado({ url, ativo, nome, invalidar, size = 'sm', icone }: {
   url: string; ativo: boolean; nome: string; invalidar: string[]; size?: 'sm' | 'md'
+  /** Nas grelhas: só o ícone (texto ao passar o rato). */
+  icone?: boolean
 }) {
   const qc = useQueryClient()
   const toast = useToast()
@@ -19,10 +21,14 @@ export function BotaoEstado({ url, ativo, nome, invalidar, size = 'sm' }: {
     },
     onError: (e) => { if (!confirmar) toast(e instanceof Error ? e.message : 'Erro', 'err') },
   })
-  if (!ativo) return <Button size={size} icon="hist" loading={m.isPending} onClick={() => m.mutate(true)}>Reativar</Button>
+  if (!ativo) return icone
+    ? <AcaoIcone icon="hist" label={`Reativar ${nome}`} loading={m.isPending} onClick={() => m.mutate(true)} />
+    : <Button size={size} icon="hist" loading={m.isPending} onClick={() => m.mutate(true)}>Reativar</Button>
   return (
     <>
-      <Button size={size} variant="danger" onClick={() => { m.reset(); setConfirmar(true) }}>Desativar</Button>
+      {icone
+        ? <AcaoIcone icon="trash" tom="perigo" label={`Desativar ${nome}`} onClick={() => { m.reset(); setConfirmar(true) }} />
+        : <Button size={size} variant="danger" onClick={() => { m.reset(); setConfirmar(true) }}>Desativar</Button>}
       {confirmar && (
         <Modal title={`Desativar ${nome}`} onClose={() => setConfirmar(false)}
           footer={<><Button variant="ghost" onClick={() => setConfirmar(false)}>Cancelar</Button>

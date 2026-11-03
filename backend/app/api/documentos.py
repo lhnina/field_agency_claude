@@ -8,7 +8,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload, undefer
 
 from app import ambito
-from app.api.base import obter
+from app.api.base import garantir_funcao, obter
 from app.db import get_db
 from app.models import Cliente, Colaborador, DocumentoColaborador, Insignia, RequisitoDocumental, TipoDocumento, User
 from app.security import requer
@@ -116,7 +116,7 @@ def criar_requisito(body: RequisitoIn, user: User = Depends(requer("documentos.c
             raise HTTPException(404, "Cliente não encontrado")
     if body.insignia_id:
         obter(db, Insignia, body.insignia_id, user)
-    funcao = (body.funcao or "").strip() or None
+    funcao = garantir_funcao(db, user.tenant_id, body.funcao)
     existe = db.scalar(select(RequisitoDocumental).where(
         RequisitoDocumental.tenant_id == user.tenant_id, RequisitoDocumental.ativo.is_(True),
         RequisitoDocumental.tipo_documento_id == body.tipo_documento_id,
@@ -142,14 +142,6 @@ def remover_requisito(rid: int, user: User = Depends(requer("documentos.configur
     op.auditar(db, user, "requisito_documental", r.id, "desativar", None)
     db.commit()
     return {"ok": True}
-
-
-@router.get("/funcoes")
-def funcoes(user: User = Depends(requer("colaboradores.ler")), db: Session = Depends(get_db)):
-    """Funções em uso nos colaboradores (para os requisitos por função)."""
-    vals = db.scalars(select(Colaborador.funcao).where(Colaborador.tenant_id == user.tenant_id,
-                                                       Colaborador.funcao.is_not(None)).distinct()).all()
-    return sorted({v.strip() for v in vals if v and v.strip()})
 
 
 # ------------------------------------------------------------------ situação documental

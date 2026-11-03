@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.base import obter
+from app.api.base import garantir_funcao, obter
 from app.db import get_db
 from app.models import (
     Afetacao, Ausencia, Colaborador, Contrato, EstadoContrato, EstadoOcorrencia, LinhaContrato, Ocorrencia, Perfil, User,
@@ -99,6 +99,7 @@ def detalhe(cid: int, user: User = Depends(requer("colaboradores.ler")), db: Ses
 def criar(body: ColaboradorIn, user: User = Depends(requer("colaboradores.editar")), db: Session = Depends(get_db)):
     if db.scalar(select(Colaborador).where(Colaborador.tenant_id == user.tenant_id, Colaborador.numero == body.numero)):
         raise HTTPException(409, f"Já existe um colaborador com o n.º {body.numero}")
+    body.funcao = garantir_funcao(db, user.tenant_id, body.funcao)
     c = Colaborador(tenant_id=user.tenant_id, **body.model_dump())
     db.add(c)
     db.commit()
@@ -109,6 +110,7 @@ def criar(body: ColaboradorIn, user: User = Depends(requer("colaboradores.editar
 @router.put("/colaboradores/{cid}", response_model=ColaboradorOut)
 def editar(cid: int, body: ColaboradorIn, user: User = Depends(requer("colaboradores.editar")), db: Session = Depends(get_db)):
     c = obter(db, Colaborador, cid, user)
+    body.funcao = garantir_funcao(db, user.tenant_id, body.funcao)
     antes = {k: getattr(c, k) for k in body.model_dump()}
     for k, v in body.model_dump().items():
         setattr(c, k, v)

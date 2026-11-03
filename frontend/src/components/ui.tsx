@@ -38,6 +38,8 @@ const PATHS = {
   logout: 'M9 21H5V3h4M16 17l5-5-5-5M21 12H9',
   sync: 'M21 12a9 9 0 0 1-15.5 6.2L3 16M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M3 21v-5h5',
   user: 'M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21v-1a8 8 0 0 1 16 0v1',
+  trash: 'M3 6h18M8 6V4h8v2M6 6l1 15h10l1-15M10 11v6M14 11v6',
+  download: 'M12 3v12M7 10l5 5 5-5M4 21h16',
 } as const
 export type IconName = keyof typeof PATHS
 
@@ -75,6 +77,18 @@ export function IconButton({ icon, label, className = '', ...rest }: ButtonHTMLA
     <button type="button" aria-label={label} title={label}
       className={`grid place-items-center w-9 h-9 rounded-lg border border-line bg-white text-ink-80 hover:bg-bg ${className}`} {...rest}>
       <Icon name={icon} />
+    </button>
+  )
+}
+
+/** Ação de grelha só com ícone; o texto aparece ao passar o rato (e é lido pelos leitores de ecrã). */
+export function AcaoIcone({ icon, label, tom = 'neutro', loading, className = '', ...rest }: ButtonHTMLAttributes<HTMLButtonElement> & {
+  icon: IconName; label: string; tom?: 'neutro' | 'perigo'; loading?: boolean
+}) {
+  return (
+    <button type="button" aria-label={label} title={label} disabled={rest.disabled || loading}
+      className={`inline-grid place-items-center w-8 h-8 rounded-lg align-middle disabled:opacity-45 ${tom === 'perigo' ? 'text-ink-60 hover:text-err-fg hover:bg-err-bg' : 'text-ink-60 hover:text-ink hover:bg-line-soft'} ${className}`} {...rest}>
+      {loading ? <Spinner /> : <Icon name={icon} size={16} />}
     </button>
   )
 }

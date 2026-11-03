@@ -62,7 +62,7 @@ export function Tabela({ path, titulo, ajuda }: { path: string; titulo: string; 
                   <span className="text-[13.5px] font-medium">{i.nome}</span>{!i.ativo && <Badge>Inativo</Badge>}
                   <span className="flex-1" />
                   {pode && <Button size="sm" variant="ghost" icon="edit" onClick={() => setEdit({ id: i.id, nome: i.nome })}>Renomear</Button>}
-                  {pode && <BotaoEstado url={`/${path}/${i.id}/estado`} ativo={i.ativo} nome={i.nome} invalidar={[path]} />}
+                  {pode && <BotaoEstado icone url={`/${path}/${i.id}/estado`} ativo={i.ativo} nome={i.nome} invalidar={[path]} />}
                 </>
               )}
             </li>

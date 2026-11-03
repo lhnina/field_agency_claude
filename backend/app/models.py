@@ -110,6 +110,14 @@ class Insignia(TenantMixin, Base):
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
 
 
+class Funcao(TenantMixin, Base):
+    """Funções dos colaboradores (Repositor(a), Promotor(a)…). Tabela única para não haver variantes do mesmo nome."""
+    __tablename__ = "funcoes"
+    id: Mapped[int] = IdCol()
+    nome: Mapped[str] = mapped_column(String(80))
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+
+
 class Zona(TenantMixin, Base):
     __tablename__ = "zonas"
     id: Mapped[int] = IdCol()

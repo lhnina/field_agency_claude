@@ -13,7 +13,7 @@ from sqlalchemy import select, text
 
 from app.db import Base, SessionLocal, engine
 from app.models import (
-    Ausencia, Cliente, Colaborador, Contrato, DocumentoColaborador, ModeloCredencial, EstadoContrato, Feriado, Insignia, LinhaContrato, Loja,
+    Ausencia, Cliente, Colaborador, Contrato, DocumentoColaborador, ModeloCredencial, EstadoContrato, Feriado, Funcao, Insignia, LinhaContrato, Loja,
     Marca, Perfil, RequisitoDocumental, Tenant, TipoAusencia, TipoContrato, TipoDocumento, TipoVinculo, User, Zona,
 )
 from app.security import hash_password
@@ -86,17 +86,18 @@ def run(reset: bool = True) -> None:
         clientes[nome] = c
 
     col_def = [
-        ("0412", "Inês Carvalho", "Repositora", TipoVinculo.a_termo, "Amadora", "rui", "11.40", "1111100"),
-        ("0198", "Pedro Almeida", "Repositor", TipoVinculo.sem_termo, "Lisboa", "rui", "11.90", "1111110"),
-        ("0877", "Sofia Martins", "Promotora", TipoVinculo.muito_curta_duracao, "Amadora", "rui", "10.80", "1010011"),
-        ("0233", "Carla Sousa", "Repositora", TipoVinculo.sem_termo, "Oeiras", "sara", "12.20", "1111100"),
-        ("0951", "João Ferreira", "Promotor", TipoVinculo.recibos_verdes, "Odivelas", "rui", "14.00", "0101000"),
-        ("0560", "Ana Lopes", "Repositora", TipoVinculo.a_termo, "Sintra", "sara", "11.40", "1111100"),
-        ("0734", "Beatriz Nunes", "Repositora", TipoVinculo.a_termo, "Odivelas", "rui", "11.20", "1101100"),
-        ("0902", "Tiago Moreira", "Promotor", TipoVinculo.muito_curta_duracao, "Loures", "rui", "10.80", "0001111"),
-        ("0645", "Marco Dias", "Repositor", TipoVinculo.sem_termo, "Amadora", "rui", "11.40", "1111100"),
-        ("0388", "Rita Gonçalves", "Repositora", TipoVinculo.a_termo, "Sintra", "sara", "11.40", "1111100"),
+        ("0412", "Inês Carvalho", "Repositor(a)", TipoVinculo.a_termo, "Amadora", "rui", "11.40", "1111100"),
+        ("0198", "Pedro Almeida", "Repositor(a)", TipoVinculo.sem_termo, "Lisboa", "rui", "11.90", "1111110"),
+        ("0877", "Sofia Martins", "Promotor(a)", TipoVinculo.muito_curta_duracao, "Amadora", "rui", "10.80", "1010011"),
+        ("0233", "Carla Sousa", "Repositor(a)", TipoVinculo.sem_termo, "Oeiras", "sara", "12.20", "1111100"),
+        ("0951", "João Ferreira", "Promotor(a)", TipoVinculo.recibos_verdes, "Odivelas", "rui", "14.00", "0101000"),
+        ("0560", "Ana Lopes", "Repositor(a)", TipoVinculo.a_termo, "Sintra", "sara", "11.40", "1111100"),
+        ("0734", "Beatriz Nunes", "Repositor(a)", TipoVinculo.a_termo, "Odivelas", "rui", "11.20", "1101100"),
+        ("0902", "Tiago Moreira", "Promotor(a)", TipoVinculo.muito_curta_duracao, "Loures", "rui", "10.80", "0001111"),
+        ("0645", "Marco Dias", "Repositor(a)", TipoVinculo.sem_termo, "Amadora", "rui", "11.40", "1111100"),
+        ("0388", "Rita Gonçalves", "Repositor(a)", TipoVinculo.a_termo, "Sintra", "sara", "11.40", "1111100"),
     ]
+    db.add_all([Funcao(tenant_id=T, nome=n) for n in ("Repositor(a)", "Promotor(a)", "Chefe de equipa")])
     cols = {}
     for num, nome, funcao, vinc, z, s, custo, disp in col_def:
         c = Colaborador(tenant_id=T, numero=num, nome=nome, funcao=funcao, vinculo=vinc, zona_id=zonas[z].id,
@@ -223,7 +224,7 @@ def _documentacao(db, T, cols, clientes, ins, autor, hoje) -> None:
         tipos[nome] = TipoDocumento(tenant_id=T, nome=nome, tem_validade=val, dias_aviso=aviso)
     db.add_all(tipos.values())
     db.flush()
-    for tipo, kw in [("Cartão de Cidadão", {}), ("Formação HACCP", {"funcao": "Promotora"}), ("Formação HACCP", {"funcao": "Promotor"}),
+    for tipo, kw in [("Cartão de Cidadão", {}), ("Formação HACCP", {"funcao": "Promotor(a)"}),
                      ("Formação HACCP", {"cliente_id": clientes["Nata Doce Gelados"].id}),
                      ("Registo criminal", {"insignia_id": ins["Continente"].id}),
                      ("Seguro de acidentes pessoais", {"cliente_id": clientes["Atlântico Conservas"].id})]:

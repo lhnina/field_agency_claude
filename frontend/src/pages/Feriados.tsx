@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Badge, Button, Card, ErrorBox, Field, IconButton, Loading, Modal, useToast } from '../components/ui'
+import { AcaoIcone, Badge, Button, Card, ErrorBox, Field, IconButton, Loading, Modal, useToast } from '../components/ui'
 import { DataInput } from '../components/DataInput'
 import { api, session } from '../lib/api'
 import { dataCurta, diaSemana } from '../lib/format'
@@ -40,7 +40,7 @@ export default function Feriados() {
                 <td className="num whitespace-nowrap">{diaSemana(f.data)}, {dataCurta(f.data)}</td>
                 <td className="font-medium">{f.nome}</td>
                 <td>{f.ambito === 'nacional' ? <Badge>Nacional</Badge> : f.ambito === 'zona' ? <Badge tone="info">Zona {f.zona}</Badge> : <Badge tone="warn">Toda a agência</Badge>}</td>
-                <td className="text-right">{f.id && pode && <Button size="sm" variant="danger" onClick={() => apagar.mutate(f.id!)}>Remover</Button>}</td>
+                <td className="text-right">{f.id && pode && <AcaoIcone icon="trash" tom="perigo" label={`Remover ${f.nome}`} onClick={() => apagar.mutate(f.id!)} />}</td>
               </tr>
             ))}</tbody>
           </table>

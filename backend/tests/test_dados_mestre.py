@@ -74,3 +74,22 @@ def test_importacao_aceita_cabecalho_antigo_codigo_phc(mundo):
     imp.importar(mundo.db, mundo.gestor, "clientes", conteudo, True)
     c = mundo.db.query(Cliente).filter_by(nome="Novo Cliente").one()
     assert c.codigo_erp == 1500 and c.gestor_conta_id == mundo.gc.id
+
+
+def test_funcoes_tabela_unica_e_renomear_propaga(client, mundo):
+    from app.models import Colaborador, Funcao, RequisitoDocumental, TipoDocumento
+    mundo.db.add(Funcao(tenant_id=mundo.t.id, nome="Promotor(a)"))
+    tipo = TipoDocumento(tenant_id=mundo.t.id, nome="HACCP")
+    mundo.db.add(tipo)
+    mundo.db.commit()
+    h = token(client, "g@t.pt")
+    body = {"numero": "77", "nome": "Nova", "vinculo": "a_termo", "funcao": "PROMOTOR(A)"}
+    assert client.post("/api/colaboradores", headers=h, json=body).json()["funcao"] == "Promotor(a)"
+    r = client.post("/api/requisitos-documentais", headers=h, json={"tipo_documento_id": tipo.id, "funcao": "promotor(a)"})
+    assert r.status_code == 201
+    assert client.post("/api/requisitos-documentais", headers=h, json={"tipo_documento_id": tipo.id, "funcao": "Promotor(a)"}).status_code == 409
+    fid = next(f["id"] for f in client.get("/api/funcoes", headers=h).json() if f["nome"] == "Promotor(a)")
+    assert client.put(f"/api/funcoes/{fid}", headers=h, json={"nome": "Promotor de vendas"}).status_code == 200
+    mundo.db.expire_all()
+    assert mundo.db.query(Colaborador).filter_by(numero="77").one().funcao == "Promotor de vendas"
+    assert mundo.db.query(RequisitoDocumental).one().funcao == "Promotor de vendas"

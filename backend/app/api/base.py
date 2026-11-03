@@ -6,7 +6,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import Cliente, Contrato, EstadoContrato, Insignia, LinhaContrato, Loja, Marca, Perfil, User, Zona
+from app.models import Cliente, Contrato, EstadoContrato, Funcao, Insignia, LinhaContrato, Loja, Marca, Perfil, User, Zona
 from app.schemas import ClienteIn, ClienteOut, EstadoAtivoIn, IdNome, IdNomeAtivo, LojaIn, LojaOut, Nome, TokenOut, UserOut
 from app.security import create_token, current_user, requer, verify_password
 from app.services import operacao as op
@@ -67,7 +67,7 @@ def _contratos_vivos(db: Session, *cond) -> int:
 
 
 # ---------------------------------------------------------------- listas simples (zonas, insígnias)
-def _simple(model, path: str, tag: str, entidade: str):
+def _simple(model, path: str, tag: str, entidade: str, renomear=None):
     @router.get(f"/{path}", response_model=list[IdNomeAtivo], tags=[tag], name=f"listar_{path}")
     def listar(inativos: bool = False, user: User = Depends(requer("dados_mestre.ler")), db: Session = Depends(get_db)):
         q = select(model).where(model.tenant_id == user.tenant_id)
@@ -87,7 +87,12 @@ def _simple(model, path: str, tag: str, entidade: str):
     @router.put(f"/{path}/{{oid}}", response_model=IdNomeAtivo, tags=[tag], name=f"editar_{path}")
     def editar(oid: int, body: Nome, user: User = Depends(requer("dados_mestre.editar")), db: Session = Depends(get_db)):
         obj = obter(db, model, oid, user)
-        obj.nome = body.nome.strip()
+        novo = body.nome.strip()
+        if db.scalar(select(model).where(model.tenant_id == user.tenant_id, model.id != obj.id, func.lower(model.nome) == novo.lower())):
+            raise HTTPException(409, "Já existe um registo com este nome")
+        antigo, obj.nome = obj.nome, novo
+        if renomear and antigo != novo:
+            renomear(db, user, antigo, novo)
         db.commit()
         return obj
 
@@ -98,6 +103,31 @@ def _simple(model, path: str, tag: str, entidade: str):
 
 _simple(Zona, "zonas", "dados mestre", "zona")
 _simple(Insignia, "insignias", "dados mestre", "insignia")
+
+
+def _renomear_funcao(db: Session, user: User, antigo: str, novo: str) -> None:
+    """A função é guardada por nome nos colaboradores e nos requisitos: acompanha a mudança de nome."""
+    from sqlalchemy import update
+    from app.models import Colaborador, RequisitoDocumental
+    db.execute(update(Colaborador).where(Colaborador.tenant_id == user.tenant_id, Colaborador.funcao == antigo).values(funcao=novo))
+    db.execute(update(RequisitoDocumental).where(RequisitoDocumental.tenant_id == user.tenant_id,
+                                                 RequisitoDocumental.funcao == antigo).values(funcao=novo))
+
+
+_simple(Funcao, "funcoes", "dados mestre", "funcao", _renomear_funcao)
+
+
+def garantir_funcao(db: Session, tenant_id: int, nome: str | None) -> str | None:
+    """Devolve o nome da função tal como está na tabela (sem distinguir maiúsculas); cria-a se não existir."""
+    nome = (nome or "").strip()
+    if not nome:
+        return None
+    f = db.scalar(select(Funcao).where(Funcao.tenant_id == tenant_id, func.lower(Funcao.nome) == nome.lower()))
+    if not f:
+        f = Funcao(tenant_id=tenant_id, nome=nome)
+        db.add(f)
+        db.flush()
+    return f.nome
 
 
 # ---------------------------------------------------------------- clientes

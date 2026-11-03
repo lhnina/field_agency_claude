@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, Seg, useToast } from '../components/ui'
+import { AcaoIcone, Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, Seg, useToast } from '../components/ui'
 import { DataInput } from '../components/DataInput'
 import { Credenciais, ModelosCredencial } from './Credenciais'
 import { abrirFicheiro, api, apiForm, session } from '../lib/api'
@@ -235,7 +235,8 @@ function Tipos() {
               <td>{t.ativo ? <Badge tone="ok" dot>Ativo</Badge> : <Badge dot>Inativo</Badge>}</td>
               <td className="text-right whitespace-nowrap">{cfg && <>
                 <Button size="sm" variant="ghost" icon="edit" onClick={() => setEdit(t)}>Editar</Button>
-                <Button size="sm" variant="ghost" loading={estado.isPending && estado.variables?.id === t.id} onClick={() => estado.mutate(t)}>{t.ativo ? 'Desativar' : 'Reativar'}</Button>
+                <AcaoIcone icon={t.ativo ? 'trash' : 'hist'} tom={t.ativo ? 'perigo' : 'neutro'} label={`${t.ativo ? 'Desativar' : 'Reativar'} ${t.nome}`}
+                  loading={estado.isPending && estado.variables?.id === t.id} onClick={() => estado.mutate(t)} />
               </>}</td>
             </tr>
           ))}</tbody>
@@ -296,7 +297,7 @@ function Requisitos() {
                 <td>{r.funcao ?? <span className="text-ink-60">Qualquer</span>}</td>
                 <td>{r.cliente ?? <span className="text-ink-60">Qualquer</span>}</td>
                 <td>{r.insignia ?? <span className="text-ink-60">Qualquer</span>}</td>
-                <td className="text-right">{cfg && <Button size="sm" variant="ghost" loading={remover.isPending && remover.variables?.id === r.id} onClick={() => remover.mutate(r)}>Remover</Button>}</td>
+                <td className="text-right">{cfg && <AcaoIcone icon="trash" tom="perigo" label={`Remover requisito ${r.tipo}`} loading={remover.isPending && remover.variables?.id === r.id} onClick={() => remover.mutate(r)} />}</td>
               </tr>
             ))}</tbody>
           </table>
@@ -313,7 +314,7 @@ function RequisitoDialog({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient()
   const toast = useToast()
   const tipos = useQuery({ queryKey: ['tipos-documento'], queryFn: () => api<TipoDocumento[]>('/tipos-documento') })
-  const funcoes = useQuery({ queryKey: ['funcoes'], queryFn: () => api<string[]>('/funcoes') })
+  const funcoes = useQuery({ queryKey: ['funcoes'], queryFn: () => api<IdNome[]>('/funcoes') })
   const clientes = useQuery({ queryKey: ['clientes'], queryFn: () => api<IdNome[]>('/clientes') })
   const insignias = useQuery({ queryKey: ['insignias'], queryFn: () => api<IdNome[]>('/insignias') })
   const [f, setF] = useState({ tipo_documento_id: '', funcao: '', cliente_id: '', insignia_id: '' })
@@ -334,7 +335,7 @@ function RequisitoDialog({ onClose }: { onClose: () => void }) {
       footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" loading={m.isPending} disabled={!f.tipo_documento_id} onClick={() => m.mutate()}>Criar</Button></>}>
       <div className="grid grid-cols-2 gap-3.5">
         <div className="col-span-2">{sel('tipo_documento_id', 'Documento obrigatório', (tipos.data ?? []).map((t) => ({ v: String(t.id), l: t.nome })), 'Escolher…')}</div>
-        {sel('funcao', 'Para a função', (funcoes.data ?? []).map((x) => ({ v: x, l: x })))}
+        {sel('funcao', 'Para a função', (funcoes.data ?? []).map((x) => ({ v: x.nome, l: x.nome })))}
         {sel('cliente_id', 'Nos serviços do cliente', (clientes.data ?? []).map((c) => ({ v: String(c.id), l: c.nome })))}
         {sel('insignia_id', 'Nas lojas da cadeia', (insignias.data ?? []).map((c) => ({ v: String(c.id), l: c.nome })))}
       </div>

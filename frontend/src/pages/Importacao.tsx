@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Badge, Button, Card, ErrorBox, Icon, PageHeader, Spinner, useToast } from '../components/ui'
+import { AcaoIcone, Badge, Button, Card, ErrorBox, Icon, PageHeader, Spinner, useToast } from '../components/ui'
 import { ApiError, api, session } from '../lib/api'
 
 type Tipo = 'clientes' | 'lojas' | 'colaboradores' | 'contratos'
@@ -75,7 +75,7 @@ export default function Importacao() {
       </div>
 
       <Card className="p-[18px] flex flex-wrap items-center gap-3">
-        <Button icon="file" onClick={modelo}>Descarregar modelo Excel</Button>
+        <AcaoIcone icon="download" label="Descarregar modelo Excel" onClick={modelo} className="!w-9 !h-9 border border-line-strong bg-white" />
         <label className="inline-flex items-center gap-2 h-9 px-3.5 rounded-lg border border-dashed border-line-strong bg-[#FAFBF9] text-[13.5px] cursor-pointer hover:border-petrol-600">
           <Icon name="plus" size={16} />{ficheiro ? ficheiro.name : 'Escolher ficheiro .xlsx'}
           <input ref={input} type="file" accept=".xlsx" className="sr-only"

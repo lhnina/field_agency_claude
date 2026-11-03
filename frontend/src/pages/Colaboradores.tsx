@@ -237,6 +237,7 @@ function ColabDialog({ c, onClose }: { c: Colaborador | null; onClose: () => voi
   const toast = useToast()
   const zonas = useQuery({ queryKey: ['zonas'], queryFn: () => api<IdNome[]>('/zonas') })
   const sups = useQuery({ queryKey: ['supervisores'], queryFn: () => api<IdNome[]>('/utilizadores/supervisores') })
+  const funcoes = useQuery({ queryKey: ['funcoes'], queryFn: () => api<IdNome[]>('/funcoes') })
   const [f, setF] = useState({
     numero: c?.numero ?? '', nome: c?.nome ?? '', funcao: c?.funcao ?? '', email: c?.email ?? '', telefone: c?.telefone ?? '',
     vinculo: (c?.vinculo ?? 'a_termo') as Vinculo, data_inicio: c?.data_inicio ?? '', zona_id: c?.zona_id ? String(c.zona_id) : '',
@@ -260,7 +261,12 @@ function ColabDialog({ c, onClose }: { c: Colaborador | null; onClose: () => voi
       <div className="grid grid-cols-2 gap-3.5">
         <Field label="Nome">{(id) => <input id={id} className="inp" value={f.nome} onChange={set('nome')} />}</Field>
         <Field label="N.º">{(id) => <input id={id} className="inp" value={f.numero} onChange={set('numero')} />}</Field>
-        <Field label="Função">{(id) => <input id={id} className="inp" value={f.funcao} onChange={set('funcao')} placeholder="Repositor(a), Promotor(a)…" />}</Field>
+        <Field label="Função" hint="Lista em Configuração › Funções">{(id) => (
+          <select id={id} className="inp" value={f.funcao} onChange={set('funcao')}>
+            <option value="">—</option>
+            {funcoes.data?.map((x) => <option key={x.id} value={x.nome}>{x.nome}</option>)}
+            {f.funcao && !funcoes.data?.some((x) => x.nome === f.funcao) && <option value={f.funcao}>{f.funcao}</option>}
+          </select>)}</Field>
         <Field label="Vínculo">{(id) => (
           <select id={id} className="inp" value={f.vinculo} onChange={set('vinculo')}>
             {Object.entries(VINCULO).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}

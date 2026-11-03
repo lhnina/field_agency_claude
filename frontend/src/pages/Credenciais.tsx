@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, useToast } from '../components/ui'
+import { AcaoIcone, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, useToast } from '../components/ui'
 import { DataInput } from '../components/DataInput'
 import { ColaboradorPicker } from '../components/ColaboradorPicker'
 import { api, apiForm, descarregar, session } from '../lib/api'
@@ -173,7 +173,7 @@ function TabelaCredenciais({ itens, colaborador = true }: { itens: CredencialT[]
                   {c.motivo && <div className="text-xs text-ink-60 mt-0.5 max-w-[180px] truncate" title={c.motivo}>{c.motivo}</div>}</td>
                 <td className="text-[12.5px] text-ink-60">{c.modelo}</td>
                 <td className="text-right whitespace-nowrap">
-                  <Button size="sm" variant="ghost" icon="file" onClick={() => baixar(c).catch((e) => toast(e.message, 'err'))}>Word</Button>
+                  <AcaoIcone icon="download" label={`Descarregar ${c.numero} (Word)`} onClick={() => baixar(c).catch((e) => toast(e.message, 'err'))} />
                   {c.estado === 'emitida' && podeEmitir() && <Button size="sm" variant="ghost" onClick={() => setAnular(c)}>Anular</Button>}
                 </td>
               </tr>
@@ -242,7 +242,7 @@ export function CredenciaisColaborador({ id, nome }: { id: number; nome: string 
               <span className="truncate">{c.loja}</span>
               <span className="flex-1" />
               <span className="text-xs num">{c.estado === 'emitida' ? `até ${dataCurta(c.valida_ate)}` : ESTADO[c.estado].label}</span>
-              <button type="button" aria-label={`Descarregar ${c.numero}`} onClick={() => baixar(c)} className="p-1 text-ink-60 hover:text-ink"><Icon name="file" size={15} /></button>
+              <AcaoIcone icon="download" label={`Descarregar ${c.numero} (Word)`} onClick={() => baixar(c)} className="!w-7 !h-7" />
             </li>
           ))}
         </ul>
@@ -308,9 +308,10 @@ export function ModelosCredencial() {
                   <td className="text-[12.5px] text-ink-60">{dataCurta(atual.criado_em?.slice(0, 10) ?? null)}{atual.criado_por ? ` · ${atual.criado_por}` : ''}</td>
                   <td>{atual.ativo ? <Badge tone="ok" dot>Ativo</Badge> : <Badge dot>Inativo</Badge>}</td>
                   <td className="text-right whitespace-nowrap">
-                    <Button size="sm" variant="ghost" icon="file" onClick={() => descarregar(`/modelos-credencial/${atual.id}/ficheiro`)}>Descarregar</Button>
+                    <AcaoIcone icon="download" label={`Descarregar ${atual.nome} v${atual.versao}`} onClick={() => descarregar(`/modelos-credencial/${atual.id}/ficheiro`)} />
                     {pode && <Button size="sm" variant="ghost" onClick={() => setCarregar({ nome: atual.nome, cliente_id: atual.cliente_id })}>Nova versão</Button>}
-                    {pode && <Button size="sm" variant="ghost" onClick={() => estado.mutate({ id: atual.id, ativo: !atual.ativo })}>{atual.ativo ? 'Desativar' : 'Reativar'}</Button>}
+                    {pode && <AcaoIcone icon={atual.ativo ? 'trash' : 'hist'} tom={atual.ativo ? 'perigo' : 'neutro'} label={`${atual.ativo ? 'Desativar' : 'Reativar'} ${atual.nome}`}
+                      onClick={() => estado.mutate({ id: atual.id, ativo: !atual.ativo })} />}
                   </td>
                 </tr>,
                 ...(aberto ? vs.filter((v) => !v.atual).map((v) => (
@@ -320,7 +321,7 @@ export function ModelosCredencial() {
                     <td className="text-ink-60">{dataCurta(v.criado_em?.slice(0, 10) ?? null)}{v.criado_por ? ` · ${v.criado_por}` : ''}</td>
                     <td><Badge>Anterior</Badge></td>
                     <td className="text-right whitespace-nowrap">
-                      <Button size="sm" variant="ghost" icon="file" onClick={() => descarregar(`/modelos-credencial/${v.id}/ficheiro`)}>Descarregar</Button>
+                      <AcaoIcone icon="download" label={`Descarregar ${v.nome} v${v.versao}`} onClick={() => descarregar(`/modelos-credencial/${v.id}/ficheiro`)} />
                       {pode && <Button size="sm" variant="ghost" loading={repor.isPending} onClick={() => repor.mutate(v.id)}>Repor esta versão</Button>}
                     </td>
                   </tr>

@@ -36,7 +36,7 @@ const BASE = 'http://localhost:5173'
   await p.screenshot({ path: '/tmp/shots/doc-tipos.png' })
   // requisitos: criar
   await p.getByRole('button', { name: 'Requisitos' }).click(); await p.getByRole('button', { name: 'Novo requisito' }).click()
-  await p.getByLabel('Documento obrigatório').selectOption({ label: 'Carta de condução' }); await p.getByLabel('Para a função').selectOption('Promotor')
+  await p.getByLabel('Documento obrigatório').selectOption({ label: 'Carta de condução' }); await p.getByLabel('Para a função').selectOption('Promotor(a)')
   await p.getByRole('dialog').getByRole('button', { name: 'Criar' }).click(); await p.waitForSelector('text=Requisito criado'); await p.waitForSelector('td:has-text("Carta de condução")')
   console.log('requisitos:', (await p.locator('table.tbl tbody tr').allInnerTexts()).map((x) => x.replace(/\s+/g, ' ').replace(' Remover', '')).join(' | '))
   await p.screenshot({ path: '/tmp/shots/doc-requisitos.png' })
