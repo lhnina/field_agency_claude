@@ -5,6 +5,7 @@ import { BotaoEstado, Facto, MostrarInativos } from '../components/Estado'
 import { AreaBadge, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, Seg, useToast } from '../components/ui'
 import { api, session } from '../lib/api'
 import { Tabela } from './Tabelas'
+import { InsigniaLogo } from '../components/InsigniaLogo'
 import { ESTADO_CONTRATO, eur, horas } from '../lib/format'
 import type { Cliente, ContratoResumo, IdNome, Loja, TipoContrato } from '../lib/types'
 
@@ -21,7 +22,7 @@ export default function ClientesLojas() {
         {(tab === 'clientes' || tab === 'lojas') && <Button variant="primary" icon="plus" onClick={() => setNovo(true)}>{tab === 'lojas' ? 'Nova loja' : 'Novo cliente'}</Button>}
       </PageHeader>
       {tab === 'clientes' ? <Clientes /> : tab === 'lojas' ? <Lojas />
-        : tab === 'insignias' ? <div className="max-w-[760px]"><Tabela key="insignias" path="insignias" titulo="Insígnias (cadeias de distribuição)" ajuda="Cadeias a que pertencem as lojas, por exemplo Continente, Pingo Doce ou Auchan." /></div>
+        : tab === 'insignias' ? <div className="max-w-[760px]"><Tabela key="insignias" path="insignias" logos titulo="Insígnias (cadeias de distribuição)" ajuda="Cadeias a que pertencem as lojas, por exemplo Continente, Pingo Doce ou Auchan." /></div>
         : <div className="max-w-[760px]"><Tabela key="zonas" path="zonas" titulo="Zonas" ajuda="Usadas nas lojas e nos colaboradores para o planeamento, as sugestões de substitutos e os feriados municipais." /></div>}
       {novo && (tab === 'lojas' ? <LojaDialog onClose={() => setNovo(false)} /> : <ClienteDialog onClose={() => setNovo(false)} />)}
     </>
@@ -106,18 +107,6 @@ function Clientes() {
           </dl>
           {atual.observacoes && <div className="px-[18px] pb-3.5 text-[13px] text-ink-80 whitespace-pre-line">{atual.observacoes}</div>}
           <div className="px-[18px] py-3.5 border-t border-line-soft">
-            <div className="text-[13px] font-semibold mb-2">Marcas</div>
-            <ul className="flex flex-col gap-1.5">
-              {atual.marcas.map((m) => (
-                <li key={m.id} className="flex items-center gap-2 text-[13px]">
-                  <span className={m.ativo === false ? 'text-ink-60 line-through' : ''}>{m.nome}</span><span className="flex-1" />
-                  <BotaoEstado url={`/marcas/${m.id}/estado`} ativo={m.ativo !== false} nome={`a marca ${m.nome}`} invalidar={['clientes']} />
-                </li>
-              ))}
-              {atual.marcas.length === 0 && <li className="text-[12.5px] text-ink-60">Sem marcas</li>}
-            </ul>
-          </div>
-          <div className="px-[18px] py-3.5 border-t border-line-soft">
             <div className="text-[13px] font-semibold mb-2">Contratos</div>
             <ul className="flex flex-col gap-2">
               {(contratos.data ?? []).filter((c) => c.cliente_id === atual.id).map((c) => (
@@ -146,11 +135,18 @@ function ClienteDialog({ cliente, onClose }: { cliente?: Cliente; onClose: () =>
   const toast = useToast()
   const campos = ['nome', 'nif', 'codigo_erp', 'morada', 'codigo_postal', 'localidade', 'telefone', 'email', 'url', 'contacto_nome', 'gestor_conta_id', 'observacoes'] as const
   const [f, setF] = useState<Record<string, string>>(() => {
-    const o: Record<string, string> = { marcas: '' }
+    const o: Record<string, string> = {}
     campos.forEach((k) => { o[k] = cliente?.[k] != null ? String(cliente[k]) : '' })
     return o
   })
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value })
+  const [marcas, setMarcas] = useState<string[]>(() => (cliente?.marcas ?? []).filter((x) => x.ativo !== false).map((x) => x.nome))
+  const [novaMarca, setNovaMarca] = useState('')
+  const juntarMarca = () => {
+    const n = novaMarca.trim()
+    if (n && !marcas.some((x) => x.toLowerCase() === n.toLowerCase())) setMarcas([...marcas, n])
+    setNovaMarca('')
+  }
   const m = useMutation({
     mutationFn: () => {
       const body: Record<string, unknown> = {}
@@ -158,7 +154,7 @@ function ClienteDialog({ cliente, onClose }: { cliente?: Cliente; onClose: () =>
       body.nome = f.nome.trim()
       body.codigo_erp = f.codigo_erp ? Number(f.codigo_erp) : null
       body.gestor_conta_id = f.gestor_conta_id ? Number(f.gestor_conta_id) : null
-      body.marcas = [...(cliente?.marcas.map((x) => x.nome) ?? []), ...f.marcas.split(/[;,]/).map((s) => s.trim()).filter(Boolean)]
+      body.marcas = novaMarca.trim() && !marcas.some((x) => x.toLowerCase() === novaMarca.trim().toLowerCase()) ? [...marcas, novaMarca.trim()] : marcas
       return api(cliente ? `/clientes/${cliente.id}` : '/clientes', { method: cliente ? 'PUT' : 'POST', body })
     },
     onSuccess: () => { qc.invalidateQueries({ queryKey: ['clientes'] }); toast(cliente ? 'Cliente atualizado' : 'Cliente criado'); onClose() },
@@ -186,7 +182,24 @@ function ClienteDialog({ cliente, onClose }: { cliente?: Cliente; onClose: () =>
             {gestores.data?.map((g) => <option key={g.id} value={g.id}>{g.nome}</option>)}
             {cliente?.gestor_conta && !gestores.data?.some((g) => g.id === cliente.gestor_conta!.id) && <option value={cliente.gestor_conta.id}>{cliente.gestor_conta.nome} (inativo)</option>}
           </select>)}</Field>
-        <Field label={cliente ? 'Acrescentar marcas' : 'Marcas'} hint="Separadas por vírgulas">{(id) => <input id={id} className="inp" value={f.marcas} onChange={set('marcas')} />}</Field>
+        <div className="col-span-3">
+          <Field label="Marcas" hint="Escreva o nome e carregue em Enter. Retirar uma marca não a apaga: deixa de estar disponível em contratos novos.">{(id) => (
+            <div className="flex gap-2">
+              <input id={id} className="inp flex-1" value={novaMarca} placeholder="Nova marca" onChange={(e) => setNovaMarca(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); juntarMarca() } }} />
+              <Button icon="plus" disabled={!novaMarca.trim()} onClick={juntarMarca}>Acrescentar</Button>
+            </div>)}</Field>
+          <div className="flex flex-wrap gap-1.5 mt-2" aria-label="Marcas do cliente">
+            {marcas.map((nome) => (
+              <span key={nome} className="inline-flex items-center gap-1 h-7 pl-2.5 pr-1 rounded-full bg-ok-bg text-ok-fg text-[13px] font-medium">
+                {nome}
+                <button type="button" aria-label={`Retirar a marca ${nome}`} title={`Retirar a marca ${nome}`} onClick={() => setMarcas(marcas.filter((x) => x !== nome))}
+                  className="grid place-items-center w-5 h-5 rounded-full hover:bg-[#C9E6D5]"><Icon name="x" size={12} /></button>
+              </span>
+            ))}
+            {marcas.length === 0 && <span className="text-[12.5px] text-ink-60">Sem marcas</span>}
+          </div>
+        </div>
         <Field label="Observações" className="col-span-3">{(id) => <textarea id={id} className="inp h-20 py-2" value={f.observacoes} onChange={set('observacoes')} />}</Field>
       </div>
       {m.error ? <div className="mt-3"><ErrorBox error={m.error} /></div> : null}
@@ -214,7 +227,7 @@ function Lojas() {
     <div className="flex flex-wrap items-start gap-4">
       <Card className="flex-[999_1_560px] overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 px-3.5 py-3 border-b border-line-soft">
-          <Pesquisa value={q} onChange={setQ} placeholder="Nome ou localidade" />
+          <Pesquisa value={q} onChange={setQ} placeholder="Nome, código ERP ou localidade" />
           <label className="inline-flex items-center gap-1.5 h-8 pl-2.5 pr-1 rounded-md border border-line-strong bg-white text-[13px] text-ink-80">Zona:
             <select value={zona} onChange={(e) => setZona(e.target.value)} className="bg-transparent font-medium text-ink outline-none"><option value="">Todas</option>{zonas.data?.map((z) => <option key={z.id} value={z.id}>{z.nome}</option>)}</select>
           </label>
@@ -227,8 +240,11 @@ function Lojas() {
               <thead><tr><th>Loja</th><th>Insígnia</th><th>Zona</th><th>Supervisor</th><th>Horário</th></tr></thead>
               <tbody>{itens.map((l) => (
                 <tr key={l.id} className={`${atual?.id === l.id ? '[&>td]:!bg-[#EAF4F2]' : ''} ${l.ativo ? '' : 'opacity-60'}`}>
-                  <td><NomeLink nome={l.nome} ativo={l.ativo} onClick={() => setSel(l.id)} />
-                    <div className="text-xs text-ink-60">{[l.morada, l.localidade].filter(Boolean).join(', ') || '—'}</div></td>
+                  <td><div className="flex items-center gap-2.5">
+                    <InsigniaLogo id={l.insignia?.id} v={l.insignia?.logo_v} nome={l.insignia?.nome} size={26} inicial />
+                    <div><NomeLink nome={l.nome} ativo={l.ativo} onClick={() => setSel(l.id)} />
+                      <div className="text-xs text-ink-60">{[l.codigo_erp && `ERP ${l.codigo_erp}`, l.morada, l.localidade].filter(Boolean).join(' · ') || '—'}</div></div>
+                  </div></td>
                   <td>{l.insignia?.nome ?? '—'}</td><td>{l.zona?.nome ?? '—'}</td>
                   <td className="text-[12.5px]">{nomeSup(l.supervisor_id)}</td>
                   <td className="text-[12.5px] text-ink-60">{l.horario_semana ?? '—'}</td>
@@ -241,7 +257,8 @@ function Lojas() {
       {atual && (
         <Card className="flex-[0_1_400px] min-w-[320px]">
           <div className="flex gap-3.5 items-start p-[18px]">
-            <span className="grid place-items-center w-[52px] h-[52px] rounded-xl bg-log-bg text-log-fg flex-none"><Icon name="store" size={24} /></span>
+            {atual.insignia?.logo_v ? <InsigniaLogo id={atual.insignia.id} v={atual.insignia.logo_v} nome={atual.insignia.nome} size={52} />
+              : <span className="grid place-items-center w-[52px] h-[52px] rounded-xl bg-log-bg text-log-fg flex-none"><Icon name="store" size={24} /></span>}
             <div className="flex-1 min-w-0">
               <div className="text-[17px] font-semibold tracking-[-0.01em]">{atual.nome}</div>
               <div className="text-[12.5px] text-ink-60">{[atual.insignia?.nome, atual.zona && `Zona ${atual.zona.nome}`].filter(Boolean).join(' · ') || '—'}</div>
@@ -251,6 +268,7 @@ function Lojas() {
           </div>
           <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-[18px] py-3.5 border-t border-line-soft">
             <div className="col-span-2"><Facto k="Morada" v={[atual.morada, [atual.codigo_postal, atual.localidade].filter(Boolean).join(' ')].filter(Boolean).join(', ')} /></div>
+            <Facto k="Código ERP" v={atual.codigo_erp} />
             <Facto k="Nome para credencial" v={atual.nome_credencial} />
             <Facto k="Supervisor da agência" v={nomeSup(atual.supervisor_id)} />
             <Facto k="Horário (semana)" v={atual.horario_semana} />
@@ -287,7 +305,7 @@ function LojaDialog({ loja, onClose }: { loja?: Loja; onClose: () => void }) {
   const zonas = useQuery({ queryKey: ['zonas'], queryFn: () => api<IdNome[]>('/zonas') })
   const ins = useQuery({ queryKey: ['insignias'], queryFn: () => api<IdNome[]>('/insignias') })
   const sups = useQuery({ queryKey: ['supervisores'], queryFn: () => api<IdNome[]>('/utilizadores/supervisores') })
-  const campos = ['nome', 'nome_credencial', 'morada', 'codigo_postal', 'localidade', 'horario_semana', 'horario_fim_semana', 'contacto_nome', 'contacto_funcao', 'contacto_email', 'contacto_telefone'] as const
+  const campos = ['nome', 'codigo_erp', 'nome_credencial', 'morada', 'codigo_postal', 'localidade', 'horario_semana', 'horario_fim_semana', 'contacto_nome', 'contacto_funcao', 'contacto_email', 'contacto_telefone'] as const
   const [f, setF] = useState<Record<string, string>>(() => {
     const o: Record<string, string> = { insignia_id: String(loja?.insignia_id ?? ''), zona_id: String(loja?.zona_id ?? ''), supervisor_id: String(loja?.supervisor_id ?? '') }
     campos.forEach((k) => { o[k] = (loja?.[k] as string | null) ?? '' })
@@ -310,8 +328,9 @@ function LojaDialog({ loja, onClose }: { loja?: Loja; onClose: () => void }) {
     <Modal title={loja ? `Editar ${loja.nome}` : 'Nova loja'} onClose={onClose} width={680}
       footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" loading={m.isPending} disabled={!f.nome.trim()} onClick={() => m.mutate()}>Guardar</Button></>}>
       <div className="grid grid-cols-3 gap-3.5">
-        {txt('nome', 'Nome do ponto de venda', 'col-span-2')}{sel('insignia_id', 'Insígnia', ins.data)}
-        {txt('nome_credencial', 'Nome para credencial', 'col-span-2')}{sel('zona_id', 'Zona', zonas.data)}
+        {txt('nome', 'Nome do ponto de venda', 'col-span-2')}{txt('codigo_erp', 'Código ERP')}
+        {txt('nome_credencial', 'Nome para credencial', 'col-span-2')}{sel('insignia_id', 'Insígnia', ins.data)}
+        {sel('zona_id', 'Zona', zonas.data)}
         {txt('morada', 'Morada', 'col-span-3')}
         {txt('codigo_postal', 'Código postal')}{txt('localidade', 'Localidade')}{sel('supervisor_id', 'Supervisor da agência', sups.data)}
         {txt('horario_semana', 'Horário (semana)')}{txt('horario_fim_semana', 'Horário (fim de semana)')}<span />

@@ -66,8 +66,8 @@ def run(reset: bool = True) -> None:
         ("Intermarché Odivelas", "Intermarché", "Odivelas", "rui"), ("Lidl Odivelas", "Lidl", "Odivelas", "rui"),
     ]
     lojas = {}
-    for nome, i, z, s in lojas_def:
-        lj = Loja(tenant_id=T, nome=nome, nome_credencial=nome.upper(), insignia_id=ins[i].id, zona_id=zonas[z].id,
+    for k, (nome, i, z, s) in enumerate(lojas_def):
+        lj = Loja(tenant_id=T, nome=nome, codigo_erp=f"L{401 + k:04d}", nome_credencial=nome.upper(), insignia_id=ins[i].id, zona_id=zonas[z].id,
                   supervisor_id=users[s].id, horario_semana="08:00–22:00", horario_fim_semana="09:00–21:00",
                   localidade=z)
         db.add(lj)
@@ -218,34 +218,34 @@ def _pdf(titulo: str) -> bytes:
 def _documentacao(db, T, cols, clientes, ins, autor, hoje) -> None:
     """Tipos, requisitos e documentos de demonstração, com alguns expirados, a expirar e em falta."""
     tipos = {}
-    for nome, val, aviso in [("Cartão de Cidadão", True, 60), ("Formação HACCP", True, 30), ("Registo criminal", True, 30),
+    for nome, val, aviso in [("Doc. de Identificação", True, 60), ("Formação HACCP", True, 30), ("Registo criminal", True, 30),
                              ("Seguro de acidentes pessoais", True, 30), ("Declaração de início de atividade", False, 0),
                              ("Exame médico (ficha de aptidão)", True, 30)]:
         tipos[nome] = TipoDocumento(tenant_id=T, nome=nome, tem_validade=val, dias_aviso=aviso)
     db.add_all(tipos.values())
     db.flush()
-    for tipo, kw in [("Cartão de Cidadão", {}), ("Formação HACCP", {"funcao": "Promotor(a)"}),
+    for tipo, kw in [("Doc. de Identificação", {}), ("Formação HACCP", {"funcao": "Promotor(a)"}),
                      ("Formação HACCP", {"cliente_id": clientes["Nata Doce Gelados"].id}),
                      ("Registo criminal", {"insignia_id": ins["Continente"].id}),
                      ("Seguro de acidentes pessoais", {"cliente_id": clientes["Atlântico Conservas"].id})]:
         db.add(RequisitoDocumental(tenant_id=T, tipo_documento_id=tipos[tipo].id, **kw))
     d = lambda n: hoje + timedelta(days=n)  # noqa: E731
     docs = [  # (colaborador, tipo, validade, com anexo)
-        ("Inês Carvalho", "Cartão de Cidadão", d(1400), True), ("Inês Carvalho", "Registo criminal", d(200), True),
-        ("Pedro Almeida", "Cartão de Cidadão", d(900), True), ("Pedro Almeida", "Seguro de acidentes pessoais", d(20), False),
-        ("Sofia Martins", "Cartão de Cidadão", d(2000), True), ("Sofia Martins", "Formação HACCP", d(300), True),
-        ("Carla Sousa", "Cartão de Cidadão", d(45), False), ("Carla Sousa", "Registo criminal", d(-12), True),
-        ("João Ferreira", "Cartão de Cidadão", d(700), False), ("João Ferreira", "Formação HACCP", d(-40), True),
+        ("Inês Carvalho", "Doc. de Identificação", d(1400), True), ("Inês Carvalho", "Registo criminal", d(200), True),
+        ("Pedro Almeida", "Doc. de Identificação", d(900), True), ("Pedro Almeida", "Seguro de acidentes pessoais", d(20), False),
+        ("Sofia Martins", "Doc. de Identificação", d(2000), True), ("Sofia Martins", "Formação HACCP", d(300), True),
+        ("Carla Sousa", "Doc. de Identificação", d(45), False), ("Carla Sousa", "Registo criminal", d(-12), True),
+        ("João Ferreira", "Doc. de Identificação", d(700), False), ("João Ferreira", "Formação HACCP", d(-40), True),
         ("João Ferreira", "Declaração de início de atividade", None, True),
-        ("Ana Lopes", "Cartão de Cidadão", d(1100), True), ("Beatriz Nunes", "Cartão de Cidadão", d(-5), False),
-        ("Marco Dias", "Cartão de Cidadão", d(25), True), ("Marco Dias", "Seguro de acidentes pessoais", d(150), True),
-        ("Rita Gonçalves", "Cartão de Cidadão", d(500), True), ("Rita Gonçalves", "Registo criminal", d(10), False),
+        ("Ana Lopes", "Doc. de Identificação", d(1100), True), ("Beatriz Nunes", "Doc. de Identificação", d(-5), False),
+        ("Marco Dias", "Doc. de Identificação", d(25), True), ("Marco Dias", "Seguro de acidentes pessoais", d(150), True),
+        ("Rita Gonçalves", "Doc. de Identificação", d(500), True), ("Rita Gonçalves", "Registo criminal", d(10), False),
         ("Inês Carvalho", "Exame médico (ficha de aptidão)", d(300), False), ("Pedro Almeida", "Exame médico (ficha de aptidão)", d(200), False),
         ("Marco Dias", "Exame médico (ficha de aptidão)", d(120), False), ("Carla Sousa", "Exame médico (ficha de aptidão)", d(250), False),
     ]  # o Tiago Moreira não entregou nada
     for nome, tipo, val, anexo in docs:
         doc = DocumentoColaborador(tenant_id=T, colaborador_id=cols[nome].id, tipo_documento_id=tipos[tipo].id,
-                                   numero=f"{zlib.crc32(nome.encode()) % 10**8:08d}" if tipo == "Cartão de Cidadão" else None,
+                                   numero=f"{zlib.crc32(nome.encode()) % 10**8:08d}" if tipo == "Doc. de Identificação" else None,
                                    emissao=(val - timedelta(days=365 if tipo.startswith("Exame") else 365 * 5)) if val else d(-400), validade=val, criado_por_id=autor.id)
         if anexo:
             doc.ficheiro = _pdf(f"{tipo} - {nome}")
@@ -273,4 +273,12 @@ def _credenciais(db, T, cols, autor, hoje) -> None:
 
 
 if __name__ == "__main__":
+    import sys
+    # Proteção: nunca apaga uma base de dados que já tem dados, a não ser que se peça explicitamente.
+    with engine.connect() as conn:
+        tem_dados = conn.execute(text("SELECT EXISTS (SELECT 1 FROM tenants)")).scalar()
+    if tem_dados and "--apagar-tudo" not in sys.argv:
+        print("A base de dados já tem dados: os dados de demonstração NÃO foram carregados (nada foi apagado).\n"
+              "Só se quiser mesmo APAGAR TUDO e recomeçar com a demonstração: python -m app.seed --apagar-tudo")
+        sys.exit(1)
     run()

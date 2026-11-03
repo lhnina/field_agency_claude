@@ -280,7 +280,7 @@ function ColabDialog({ c, onClose }: { c: Colaborador | null; onClose: () => voi
         <div className="col-span-2 grid grid-cols-3 gap-3.5 pt-1 border-t border-line-soft">
           <div className="col-span-3 text-xs text-ink-60 pt-2">Identificação (usada nas credenciais)</div>
           <Field label="Data de nascimento">{(id) => <DataInput id={id} limpar value={f.data_nascimento} max={new Date().toISOString().slice(0, 10)} onChange={(v) => setF({ ...f, data_nascimento: v })} />}</Field>
-          <Field label="N.º de identificação" hint="Vazio = n.º do Cartão de Cidadão registado">{(id) => <input id={id} className="inp num" value={f.numero_identificacao} onChange={set('numero_identificacao')} />}</Field>
+          <Field label="Doc. de Identificação" hint="N.º do documento">{(id) => <input id={id} className="inp num" value={f.numero_identificacao} onChange={set('numero_identificacao')} />}</Field>
           <Field label="N.º Segurança Social">{(id) => <input id={id} inputMode="numeric" className="inp num" value={f.niss} onChange={set('niss')} />}</Field>
         </div>
         <div className="col-span-2">

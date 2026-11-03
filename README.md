@@ -28,7 +28,7 @@ Referências:
 ```bash
 cp .env.example .env
 docker compose up --build -d
-docker compose exec api python -m app.seed   # dados de demonstração
+docker compose exec api python -m app.seed   # dados de demonstração (só numa base de dados vazia)
 ```
 
 Depois abra <http://localhost:8080>. A API e a documentação OpenAPI ficam em <http://localhost:8000/docs>.
@@ -53,7 +53,7 @@ docker compose down
 docker compose -f docker-compose.dev.yml up -d
 ```
 
-Abra <http://localhost:5173>. Na primeira vez carregue os dados de demonstração com `docker compose -f docker-compose.dev.yml exec api python -m app.seed`.
+Abra <http://localhost:5173>. Na primeira vez carregue os dados de demonstração com `docker compose -f docker-compose.dev.yml exec api python -m app.seed`. O comando recusa-se a correr se já houver dados; `--apagar-tudo` apaga tudo e recomeça (use com cuidado). As atualizações da base de dados (migrações) mantêm sempre os dados existentes.
 
 - **Frontend:** as alterações aparecem no browser de imediato, muitas vezes sem refresh.
 - **Backend:** recarrega em cerca de 2 segundos.

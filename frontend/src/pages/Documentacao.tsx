@@ -234,7 +234,7 @@ function Tipos() {
               <td className="text-right num">{t.documentos}</td>
               <td>{t.ativo ? <Badge tone="ok" dot>Ativo</Badge> : <Badge dot>Inativo</Badge>}</td>
               <td className="text-right whitespace-nowrap">{cfg && <>
-                <Button size="sm" variant="ghost" icon="edit" onClick={() => setEdit(t)}>Editar</Button>
+                <AcaoIcone icon="edit" label={`Editar ${t.nome}`} onClick={() => setEdit(t)} />
                 <AcaoIcone icon={t.ativo ? 'trash' : 'hist'} tom={t.ativo ? 'perigo' : 'neutro'} label={`${t.ativo ? 'Desativar' : 'Reativar'} ${t.nome}`}
                   loading={estado.isPending && estado.variables?.id === t.id} onClick={() => estado.mutate(t)} />
               </>}</td>

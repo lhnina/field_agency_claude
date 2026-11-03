@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Avatar, Badge, Button, Card, ErrorBox, Field, Icon, Loading, Modal, useToast } from '../components/ui'
+import { AcaoIcone, Avatar, Badge, Button, Card, ErrorBox, Field, Icon, Loading, Modal, useToast } from '../components/ui'
 import { api, session } from '../lib/api'
 import type { IdNome } from '../lib/types'
 
@@ -42,7 +42,7 @@ export default function Utilizadores() {
                 <td className="text-[12.5px]">{u.perfil === 'supervisor' ? (u.zona ?? 'Todas') : <span className="text-ink-60">—</span>}</td>
                 <td>{u.ativo ? <Badge tone="ok" dot>Ativo</Badge> : <Badge dot>Inativo</Badge>}</td>
                 <td className="text-right whitespace-nowrap">
-                  <Button size="sm" variant="ghost" icon="edit" onClick={() => setEdit(u)}>Editar</Button>
+                  <AcaoIcone icon="edit" label={`Editar ${u.nome}`} onClick={() => setEdit(u)} />
                   <Button size="sm" variant="ghost" onClick={() => setSenha(u)}>Repor palavra-passe</Button>
                 </td>
               </tr>

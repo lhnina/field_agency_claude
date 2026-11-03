@@ -38,6 +38,13 @@ class IdNomeAtivo(ORM):
     id: int
     nome: str
     ativo: bool
+    logo_v: int | None = None  # só insígnias: versão do logótipo (None = sem logótipo)
+
+
+class InsigniaRef(ORM):
+    id: int
+    nome: str
+    logo_v: int | None = None
 
 
 class MarcaOut(ORM):
@@ -87,6 +94,7 @@ class ClienteOut(ORM):
 
 class LojaIn(BaseModel):
     nome: str = Field(min_length=1, max_length=160)
+    codigo_erp: str | None = Field(default=None, max_length=30)
     insignia_id: int | None = None
     zona_id: int | None = None
     supervisor_id: int | None = None
@@ -107,7 +115,7 @@ class LojaIn(BaseModel):
 class LojaOut(LojaIn, ORM):
     id: int
     ativo: bool
-    insignia: IdNome | None = None
+    insignia: InsigniaRef | None = None
     zona: IdNome | None = None
 
 
@@ -189,6 +197,8 @@ class LinhaOut(ORM):
     loja_id: int
     loja_nome: str
     loja_insignia: str | None
+    loja_insignia_id: int | None = None
+    loja_insignia_logo_v: int | None = None
     loja_zona: str | None
     inicio: date
     fim: date | None

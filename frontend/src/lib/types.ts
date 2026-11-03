@@ -14,7 +14,7 @@ export type Loja = {
   nome_credencial: string | null; morada: string | null; codigo_postal: string | null; localidade: string | null
   horario_semana: string | null; horario_fim_semana: string | null
   contacto_nome: string | null; contacto_funcao: string | null; contacto_email: string | null; contacto_telefone: string | null
-  ativo: boolean; insignia: IdNome | null; zona: IdNome | null
+  ativo: boolean; insignia: (IdNome & { logo_v: number | null }) | null; zona: IdNome | null; codigo_erp: string | null
 }
 
 export type Colaborador = {
@@ -31,7 +31,7 @@ export const DIAS = ['seg', 'ter', 'qua', 'qui', 'sex', 'sab', 'dom'] as const
 export type Dia = (typeof DIAS)[number]
 
 export type Linha = {
-  id: number; loja_id: number; loja_nome: string; loja_insignia: string | null; loja_zona: string | null
+  id: number; loja_id: number; loja_nome: string; loja_insignia: string | null; loja_insignia_id: number | null; loja_insignia_logo_v: number | null; loja_zona: string | null
   inicio: string; fim: string | null; hora_inicio: string | null; preco_hora: string; preco_hora_extra: string | null
   custo_hora_especial: string | null; mecanica: string | null; observacoes: string | null
   horas_semana: string; horas_mes: string; valor_mensal: string

@@ -93,3 +93,24 @@ def test_funcoes_tabela_unica_e_renomear_propaga(client, mundo):
     mundo.db.expire_all()
     assert mundo.db.query(Colaborador).filter_by(numero="77").one().funcao == "Promotor de vendas"
     assert mundo.db.query(RequisitoDocumental).one().funcao == "Promotor de vendas"
+
+
+def test_marcas_lista_completa_logotipo_e_codigo_erp_da_loja(client, mundo):
+    mundo.db.commit()
+    h = token(client, "g@t.pt")
+    c = client.post("/api/clientes", headers=h, json={"nome": "Doce Lar", "marcas": ["A", "B"]}).json()
+    base = {k: c[k] for k in ("nome",)}
+    r = client.put(f"/api/clientes/{c['id']}", headers=h, json={**base, "marcas": ["B", "C"]}).json()
+    assert {m["nome"]: m["ativo"] for m in r["marcas"]} == {"A": False, "B": True, "C": True}
+    r = client.put(f"/api/clientes/{c['id']}", headers=h, json={**base, "marcas": ["A", "B", "C"]}).json()
+    assert all(m["ativo"] for m in r["marcas"])
+    # logótipo da insígnia: carregar, servir sem sessão, aparecer nas lojas
+    i = client.post("/api/insignias", headers=h, json={"nome": "Continente"}).json()
+    png = b"\x89PNG\r\n\x1a\n" + b"0" * 20
+    r = client.post(f"/api/insignias/{i['id']}/logo", headers=h, files={"ficheiro": ("logo.png", png, "image/png")})
+    assert r.status_code == 200 and r.json()["logo_v"] == 1
+    assert client.post(f"/api/insignias/{i['id']}/logo", headers=h, files={"ficheiro": ("x.txt", b"x", "text/plain")}).status_code == 422
+    assert client.get(f"/api/insignias/{i['id']}/logo").content == png
+    lj = client.post("/api/lojas", headers=h, json={"nome": "Continente Benfica", "codigo_erp": "L0999", "insignia_id": i["id"]}).json()
+    assert lj["codigo_erp"] == "L0999" and lj["insignia"]["logo_v"] == 1
+    assert [x["nome"] for x in client.get("/api/lojas", headers=h, params={"q": "l0999"}).json()] == ["Continente Benfica"]

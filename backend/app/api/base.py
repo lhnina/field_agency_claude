@@ -1,9 +1,9 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer
 
 from app.db import get_db
 from app.models import Cliente, Contrato, EstadoContrato, Funcao, Insignia, LinhaContrato, Loja, Marca, Perfil, User, Zona
@@ -104,6 +104,44 @@ def _simple(model, path: str, tag: str, entidade: str, renomear=None):
 _simple(Zona, "zonas", "dados mestre", "zona")
 _simple(Insignia, "insignias", "dados mestre", "insignia")
 
+LOGO_TIPOS = {"image/png", "image/jpeg", "image/webp", "image/svg+xml", "image/gif"}
+
+
+@router.post("/insignias/{iid}/logo", response_model=IdNomeAtivo, tags=["dados mestre"])
+async def carregar_logo(iid: int, ficheiro: UploadFile = File(...), user: User = Depends(requer("dados_mestre.editar")),
+                        db: Session = Depends(get_db)):
+    i = obter(db, Insignia, iid, user)
+    conteudo = await ficheiro.read()
+    tipo = (ficheiro.content_type or "").lower()
+    if tipo not in LOGO_TIPOS:
+        raise HTTPException(422, "O logótipo tem de ser uma imagem (PNG, JPG, WEBP, SVG ou GIF)")
+    if len(conteudo) > 1024 * 1024:
+        raise HTTPException(422, "O logótipo não pode ter mais de 1 MB")
+    i.logo, i.logo_tipo, i.logo_v = conteudo, tipo, (i.logo_v or 0) + 1
+    op.auditar(db, user, "insignia", i.id, "logotipo", {"ficheiro": ficheiro.filename})
+    db.commit()
+    return i
+
+
+@router.delete("/insignias/{iid}/logo", response_model=IdNomeAtivo, tags=["dados mestre"])
+def remover_logo(iid: int, user: User = Depends(requer("dados_mestre.editar")), db: Session = Depends(get_db)):
+    i = obter(db, Insignia, iid, user)
+    i.logo, i.logo_tipo, i.logo_v = None, None, None
+    op.auditar(db, user, "insignia", i.id, "remover_logotipo", None)
+    db.commit()
+    return i
+
+
+@router.get("/insignias/{iid}/logo", tags=["dados mestre"])
+def ver_logo(iid: int, db: Session = Depends(get_db)):
+    """Imagem do logótipo. Sem sessão, para poder ser usada diretamente em <img> (logótipos de cadeias são públicos)."""
+    i = db.scalar(select(Insignia).options(undefer(Insignia.logo)).where(Insignia.id == iid))
+    if not i or not i.logo:
+        raise HTTPException(404, "Sem logótipo")
+    return Response(i.logo, media_type=i.logo_tipo or "image/png", headers={"Cache-Control": "public, max-age=31536000, immutable",
+                                                                           "X-Content-Type-Options": "nosniff",
+                                                                           "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'"})
+
 
 def _renomear_funcao(db: Session, user: User, antigo: str, novo: str) -> None:
     """A função é guardada por nome nos colaboradores e nos requisitos: acompanha a mudança de nome."""
@@ -167,16 +205,28 @@ def _gestor_conta(db: Session, user: User, body: ClienteIn) -> None:
             raise HTTPException(422, "O gestor de conta tem de ser um utilizador com o perfil Gestor de conta")
 
 
-def _marcas(c: Cliente, nomes: list[str], tenant_id: int) -> None:
+def _marcas(db: Session, c: Cliente, nomes: list[str], tenant_id: int) -> None:
+    """A lista enviada é a lista completa de marcas ativas: acrescenta as novas, reativa as que voltaram e
+    desativa as que saíram (nunca apaga; uma marca com contratos em vigor não pode sair)."""
     atuais = {m.nome.strip().lower(): m for m in c.marcas}
+    pedidas = set()
     for nome in nomes:
         k = nome.strip().lower()
-        if k and k not in atuais:
+        if not k:
+            continue
+        pedidas.add(k)
+        if k not in atuais:
             m = Marca(tenant_id=tenant_id, nome=nome.strip())
             c.marcas.append(m)
             atuais[k] = m
-        elif k and not atuais[k].ativo:
+        elif not atuais[k].ativo:
             atuais[k].ativo = True
+    for k, m in atuais.items():
+        if m.ativo and k not in pedidas and m.id:
+            n = _contratos_vivos(db, Contrato.marca_id == m.id)
+            if n:
+                raise HTTPException(422, f"A marca {m.nome} tem {n} contrato(s) ativo(s) ou em proposta e não pode ser retirada")
+            m.ativo = False
 
 
 @router.post("/clientes", response_model=ClienteOut, status_code=201, tags=["dados mestre"])
@@ -185,7 +235,7 @@ def criar_cliente(body: ClienteIn, user: User = Depends(requer("dados_mestre.edi
         raise HTTPException(409, "Já existe um cliente com este nome")
     _gestor_conta(db, user, body)
     c = Cliente(tenant_id=user.tenant_id, **{k: getattr(body, k) for k in CAMPOS_CLIENTE})
-    _marcas(c, body.marcas, user.tenant_id)
+    _marcas(db, c, body.marcas, user.tenant_id)
     db.add(c)
     db.flush()
     op.auditar(db, user, "cliente", c.id, "criar", body.model_dump())
@@ -200,7 +250,7 @@ def editar_cliente(cid: int, body: ClienteIn, user: User = Depends(requer("dados
     antes = {k: getattr(c, k) for k in CAMPOS_CLIENTE}
     for k in CAMPOS_CLIENTE:
         setattr(c, k, getattr(body, k))
-    _marcas(c, body.marcas, user.tenant_id)
+    _marcas(db, c, body.marcas, user.tenant_id)
     op.auditar(db, user, "cliente", c.id, "editar", {"antes": antes, "depois": body.model_dump()})
     db.commit()
     return c
@@ -233,7 +283,8 @@ def lojas(q: str | None = None, zona_id: int | None = None, inativos: bool = Fal
     if q:
         for termo in q.split():
             t = f"%{termo}%"
-            s = s.where(Loja.nome.ilike(t) | Loja.localidade.ilike(t) | Loja.codigo_postal.ilike(t) | Loja.morada.ilike(t))
+            s = s.where(Loja.nome.ilike(t) | Loja.localidade.ilike(t) | Loja.codigo_postal.ilike(t) | Loja.morada.ilike(t)
+                        | Loja.codigo_erp.ilike(t))
     if zona_id:
         s = s.where(Loja.zona_id == zona_id)
     zona = ambito.zona_supervisor(user)

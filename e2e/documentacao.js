@@ -12,7 +12,7 @@ const BASE = 'http://localhost:5173'
   console.log('pendências:', await p.locator('table.tbl tbody tr').count())
   await p.screenshot({ path: '/tmp/shots/doc-pendencias.png' })
   // registar o CC do Tiago com anexo
-  const linha = p.locator('tr:has-text("Tiago Moreira"):has-text("Cartão de Cidadão")')
+  const linha = p.locator('tr:has-text("Tiago Moreira"):has-text("Doc. de Identificação")')
   await linha.getByRole('button', { name: 'Registar' }).click(); await p.getByRole('dialog').waitFor()
   await p.getByLabel('Número / referência').fill('15328877')
   await p.getByLabel('Válido até').fill('15/03/2031'); await p.getByLabel('Válido até').press('Tab')
@@ -20,9 +20,9 @@ const BASE = 'http://localhost:5173'
   await p.screenshot({ path: '/tmp/shots/doc-registar.png' })
   await p.getByRole('dialog').getByRole('button', { name: 'Guardar' }).click(); await p.waitForSelector('text=Documento registado')
   await p.getByLabel('Estado').selectOption('todos'); await p.getByLabel('Pesquisar').fill('tiago')
-  const t = (await p.locator('tr:has-text("Cartão de Cidadão")').innerText()).replace(/\s+/g, ' ')
+  const t = (await p.locator('tr:has-text("Doc. de Identificação")').innerText()).replace(/\s+/g, ' ')
   console.log('Tiago CC:', t)
-  const [popup] = await Promise.all([ctx.waitForEvent('page'), p.locator('tr:has-text("Cartão de Cidadão")').getByRole('button', { name: /cc-tiago/ }).click()])
+  const [popup] = await Promise.all([ctx.waitForEvent('page'), p.locator('tr:has-text("Doc. de Identificação")').getByRole('button', { name: /cc-tiago/ }).click()])
   // em headless não há visualizador de PDF: o separador transfere o ficheiro; validamos o conteúdo transferido
   const dl = await popup.waitForEvent('download', { timeout: 10000 }).catch(() => null)
   const path = dl ? await dl.path() : null

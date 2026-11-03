@@ -6,6 +6,7 @@ import { ColaboradorPicker } from '../components/ColaboradorPicker'
 import { EmitirCredencialDialog, podeEmitir } from './Credenciais'
 import { AreaBadge, Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, useToast } from '../components/ui'
 import { DataInput } from '../components/DataInput'
+import { InsigniaLogo } from '../components/InsigniaLogo'
 import { api } from '../lib/api'
 import { ESTADO_CONTRATO, dataCurta, eur, horas, iso, num } from '../lib/format'
 import { DIAS } from '../lib/types'
@@ -106,8 +107,13 @@ export default function ContratoDetalhe() {
                   return (
                     <tr key={ln.id} className={inativa ? '[&>td]:!bg-[#EEF0EC] text-ink-60' : ''} title={inativa ? `Terminada a ${dataCurta(ln.fim)}` : undefined}>
                       <td>
-                        <button type="button" onClick={() => setLinhaEdit(ln)} className="font-medium text-left hover:underline hover:text-petrol-600">{ln.loja_nome}</button>
-                        <div className="text-xs text-ink-60">{[ln.loja_insignia, ln.loja_zona].filter(Boolean).join(' · ')}</div>
+                        <div className="flex items-center gap-2.5">
+                          <InsigniaLogo id={ln.loja_insignia_id} v={ln.loja_insignia_logo_v} nome={ln.loja_insignia} size={26} inicial />
+                          <div>
+                            <button type="button" onClick={() => setLinhaEdit(ln)} className="font-medium text-left hover:underline hover:text-petrol-600">{ln.loja_nome}</button>
+                            <div className="text-xs text-ink-60">{[ln.loja_insignia, ln.loja_zona].filter(Boolean).join(' · ')}</div>
+                          </div>
+                        </div>
                       </td>
                       {c.tipo === 'PRO' && (
                         <td className="whitespace-nowrap">

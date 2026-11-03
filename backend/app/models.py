@@ -108,6 +108,10 @@ class Insignia(TenantMixin, Base):
     id: Mapped[int] = IdCol()
     nome: Mapped[str] = mapped_column(String(120))
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    # Logótipo da cadeia (miniatura nas grelhas de lojas). logo_v muda a cada novo logótipo (cache do browser).
+    logo: Mapped[bytes | None] = mapped_column(LargeBinary, deferred=True)
+    logo_tipo: Mapped[str | None] = mapped_column(String(60))
+    logo_v: Mapped[int | None] = mapped_column(Integer)
 
 
 class Funcao(TenantMixin, Base):
@@ -132,6 +136,7 @@ class Loja(TenantMixin, Base):
     zona_id: Mapped[int | None] = mapped_column(ForeignKey("zonas.id"), index=True)
     supervisor_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     nome: Mapped[str] = mapped_column(String(160))
+    codigo_erp: Mapped[str | None] = mapped_column(String(30), index=True)
     nome_credencial: Mapped[str | None] = mapped_column(String(160))
     morada: Mapped[str | None] = mapped_column(String(250))
     codigo_postal: Mapped[str | None] = mapped_column(String(10))

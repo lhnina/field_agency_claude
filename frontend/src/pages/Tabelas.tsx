@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { BotaoEstado, MostrarInativos } from '../components/Estado'
-import { Badge, Button, Card, ErrorBox, Loading, useToast } from '../components/ui'
-import { api, session } from '../lib/api'
+import { AcaoIcone, Badge, Button, Card, ErrorBox, Icon, Loading, useToast } from '../components/ui'
+import { InsigniaLogo } from '../components/InsigniaLogo'
+import { api, apiForm, session } from '../lib/api'
 
-type Item = { id: number; nome: string; ativo: boolean }
+type Item = { id: number; nome: string; ativo: boolean; logo_v?: number | null }
 
 /** Tabelas auxiliares (zonas e insígnias): criar, renomear, desativar. */
 export default function Tabelas() {
@@ -16,7 +17,7 @@ export default function Tabelas() {
   )
 }
 
-export function Tabela({ path, titulo, ajuda }: { path: string; titulo: string; ajuda: string }) {
+export function Tabela({ path, titulo, ajuda, logos }: { path: string; titulo: string; ajuda: string; logos?: boolean }) {
   const qc = useQueryClient()
   const toast = useToast()
   const pode = ['administrador', 'gestor', 'gestor_conta'].includes(session.user()?.perfil ?? '')
@@ -32,6 +33,12 @@ export function Tabela({ path, titulo, ajuda }: { path: string; titulo: string; 
   const renomear = useMutation({
     mutationFn: (v: { id: number; nome: string }) => api(`/${path}/${v.id}`, { method: 'PUT', body: { nome: v.nome.trim() } }),
     onSuccess: () => { setEdit(null); refresh(); toast('Nome atualizado') }, onError: (e) => toast(e instanceof Error ? e.message : 'Erro', 'err'),
+  })
+  const logo = useMutation({
+    mutationFn: ({ id, ficheiro }: { id: number; ficheiro: File | null }) => ficheiro
+      ? apiForm(`/${path}/${id}/logo`, 'POST', { ficheiro }) : api(`/${path}/${id}/logo`, { method: 'DELETE' }),
+    onSuccess: (_, v) => { refresh(); qc.invalidateQueries({ queryKey: ['lojas'] }); toast(v.ficheiro ? 'Logótipo guardado' : 'Logótipo retirado') },
+    onError: (e) => toast(e instanceof Error ? e.message : 'Erro', 'err'),
   })
   return (
     <Card className="overflow-hidden">
@@ -59,9 +66,18 @@ export function Tabela({ path, titulo, ajuda }: { path: string; titulo: string; 
                 </form>
               ) : (
                 <>
+                  {logos && (pode ? (
+                    <label title={i.logo_v ? 'Trocar o logótipo' : 'Carregar logótipo (PNG, JPG, SVG; até 1 MB)'} className="cursor-pointer rounded-md hover:ring-2 hover:ring-petrol-100">
+                      {i.logo_v ? <InsigniaLogo id={i.id} v={i.logo_v} nome={i.nome} size={32} />
+                        : <span className="grid place-items-center w-8 h-8 rounded-md border border-dashed border-line-strong text-ink-60"><Icon name="plus" size={14} /></span>}
+                      <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml,image/gif" className="sr-only" aria-label={`Logótipo de ${i.nome}`}
+                        onChange={(e) => { const fch = e.target.files?.[0]; if (fch) logo.mutate({ id: i.id, ficheiro: fch }); e.target.value = '' }} />
+                    </label>
+                  ) : <InsigniaLogo id={i.id} v={i.logo_v} nome={i.nome} size={32} inicial />)}
                   <span className="text-[13.5px] font-medium">{i.nome}</span>{!i.ativo && <Badge>Inativo</Badge>}
                   <span className="flex-1" />
-                  {pode && <Button size="sm" variant="ghost" icon="edit" onClick={() => setEdit({ id: i.id, nome: i.nome })}>Renomear</Button>}
+                  {logos && pode && i.logo_v ? <AcaoIcone icon="x" label={`Retirar o logótipo de ${i.nome}`} onClick={() => logo.mutate({ id: i.id, ficheiro: null })} /> : null}
+                  {pode && <AcaoIcone icon="edit" label={`Renomear ${i.nome}`} onClick={() => setEdit({ id: i.id, nome: i.nome })} />}
                   {pode && <BotaoEstado icone url={`/${path}/${i.id}/estado`} ativo={i.ativo} nome={i.nome} invalidar={[path]} />}
                 </>
               )}

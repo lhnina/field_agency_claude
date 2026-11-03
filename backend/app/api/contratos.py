@@ -30,6 +30,7 @@ def _linha_out(ln: LinhaContrato, hoje: date) -> LinhaOut:
     return LinhaOut(
         id=ln.id, loja_id=ln.loja_id, loja_nome=ln.loja.nome,
         loja_insignia=ln.loja.insignia.nome if ln.loja.insignia else None,
+        loja_insignia_id=ln.loja.insignia_id, loja_insignia_logo_v=ln.loja.insignia.logo_v if ln.loja.insignia else None,
         loja_zona=ln.loja.zona.nome if ln.loja.zona else None,
         inicio=ln.inicio, fim=ln.fim, h_seg=ln.h_seg, h_ter=ln.h_ter, h_qua=ln.h_qua, h_qui=ln.h_qui, h_sex=ln.h_sex,
         h_sab=ln.h_sab, h_dom=ln.h_dom, hora_inicio=ln.hora_inicio, preco_hora=ln.preco_hora,

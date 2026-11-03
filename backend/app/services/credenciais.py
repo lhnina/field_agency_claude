@@ -29,7 +29,7 @@ CAMPOS: list[Campo] = [
     Campo("numero_colaborador", "N.º interno do colaborador", "Colaborador", ("ncolaborador",)),
     Campo("funcao", "Função", "Colaborador"),
     Campo("data_nascimento", "Data de nascimento (dd/mm/aaaa)", "Colaborador", ("nasc", "datanasc", "datadenascimento")),
-    Campo("numero_identificacao", "N.º do cartão de cidadão / identificação", "Colaborador",
+    Campo("numero_identificacao", "N.º do Doc. de Identificação", "Colaborador",
           ("pe2bino", "bino", "numero", "cc", "bi", "numerocc", "nidentificacao")),
     Campo("niss", "N.º de beneficiário da Segurança Social", "Colaborador",
           ("nbenef", "numerobenef", "numerobeneficiario", "numerosegurancasocial")),
@@ -109,7 +109,8 @@ def exame_medico(db: Session, colaborador_id: int) -> date | None:
 def valores(db: Session, tenant: Tenant, colab: Colaborador, linha: LinhaContrato, *, validade: date | None,
             data_exame: date | None, emissao: date, numero: str, substitui: str | None) -> dict[str, str]:
     loja, contrato = linha.loja, linha.contrato
-    cc = documento_atual(db, colab.id, "Cartão de Cidadão", "Bilhete de identidade", "Título de residência")
+    cc = documento_atual(db, colab.id, "Doc. de Identificação", "Documento de identificação", "Cartão de Cidadão",
+                         "Bilhete de identidade", "Título de residência")
     return {
         "nome": colab.nome,
         "numero_colaborador": colab.numero,
@@ -145,7 +146,7 @@ def valores(db: Session, tenant: Tenant, colab: Colaborador, linha: LinhaContrat
 
 # Dados que, se faltarem, deixam a credencial incompleta (aviso, não bloqueio)
 OBRIGATORIOS = {
-    "data_nascimento": "data de nascimento do colaborador", "numero_identificacao": "n.º de identificação do colaborador",
+    "data_nascimento": "data de nascimento do colaborador", "numero_identificacao": "n.º do Doc. de Identificação do colaborador",
     "niss": "n.º de Segurança Social do colaborador", "data_exame_medico": "data do exame médico",
     "empresa_morada": "morada da empresa (Parâmetros)", "seguradora": "seguradora (Parâmetros)", "apolice": "n.º da apólice (Parâmetros)",
 }

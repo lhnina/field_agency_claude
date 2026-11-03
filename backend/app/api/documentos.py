@@ -231,6 +231,8 @@ async def registar(cid: int, tipo_documento_id: int = Form(...), numero: str | N
         d.ficheiro, d.ficheiro_nome, d.ficheiro_tipo = anexo
         d.ficheiro_tamanho = len(anexo[0])
     db.add(d)
+    if d.numero and dc.norm(tipo.nome) in ("doc. de identificacao", "documento de identificacao", "cartao de cidadao"):
+        c.numero_identificacao = d.numero  # o n.º do Doc. de Identificação é o mesmo da ficha do colaborador
     db.flush()
     op.auditar(db, user, "documento_colaborador", d.id, "renovar" if anteriores else "registar",
                {"colaborador_id": c.id, "tipo": tipo.nome, "validade": validade, "anexo": d.ficheiro_nome})

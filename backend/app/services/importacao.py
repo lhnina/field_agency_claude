@@ -121,7 +121,7 @@ MODELOS: dict[str, Modelo] = {
         Coluna("Observações", False, None),
     ], ["Se o cliente já existir (mesmo nome), é atualizado e as marcas novas são acrescentadas."]),
     "lojas": Modelo("Lojas", [
-        Coluna("Nome", True, "Continente Amadora"), Coluna("Insígnia", False, "Continente"),
+        Coluna("Nome", True, "Continente Amadora"), Coluna("Código ERP", False, "L0457"), Coluna("Insígnia", False, "Continente"),
         Coluna("Zona", False, "Amadora", "Criada se não existir"), Coluna("Nome para credencial", False, "CONTINENTE AMADORA"),
         Coluna("Morada", False, "Av. Conde Castro Guimarães"), Coluna("Código postal", False, "2720-100"),
         Coluna("Localidade", False, "Amadora"), Coluna("Horário semana", False, "08:00–22:00"),
@@ -340,7 +340,7 @@ def _clientes(ctx: Contexto, rows, gravar: bool) -> Resultado:
     return res
 
 
-LOJA_CAMPOS = {"Nome para credencial": "nome_credencial", "Morada": "morada", "Código postal": "codigo_postal",
+LOJA_CAMPOS = {"Código ERP": "codigo_erp", "Nome para credencial": "nome_credencial", "Morada": "morada", "Código postal": "codigo_postal",
                "Localidade": "localidade", "Horário semana": "horario_semana", "Horário fim de semana": "horario_fim_semana",
                "Contacto": "contacto_nome", "Função do contacto": "contacto_funcao", "Telefone": "contacto_telefone",
                "Email": "contacto_email"}
