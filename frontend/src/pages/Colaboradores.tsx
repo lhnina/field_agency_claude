@@ -1,9 +1,10 @@
 import { useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Avatar, Badge, Bar, Button, Card, Empty, ErrorBox, Field, Icon, Loading, Modal, PageHeader, useToast } from '../components/ui'
 import { api } from '../lib/api'
 import { BotaoEstado, MostrarInativos } from '../components/Estado'
-import { VINCULO, dataCurta, eur } from '../lib/format'
+import { AREA, VINCULO, dataCurta, eur, horas } from '../lib/format'
 import type { Colaborador, IdNome, Vinculo } from '../lib/types'
 
 const DL = ['S', 'T', 'Q', 'Q', 'S', 'S', 'D']
@@ -16,9 +17,12 @@ export default function Colaboradores() {
   const [vinculo, setVinculo] = useState('')
   const [q, setQ] = useState('')
   const [inativos, setInativos] = useState(false)
+  const [zona, setZona] = useState('')
+  const nav = useNavigate()
+  const zonas = useQuery({ queryKey: ['zonas'], queryFn: () => api<IdNome[]>('/zonas') })
   const [sel, setSel] = useState<number | null>(null)
   const [edit, setEdit] = useState<Colaborador | 'novo' | null>(null)
-  const lista = useQuery({ queryKey: ['colaboradores', vinculo, q, inativos], queryFn: () => api<Colaborador[]>('/colaboradores', { params: { vinculo, q, inativos } }) })
+  const lista = useQuery({ queryKey: ['colaboradores', vinculo, q, inativos, zona], queryFn: () => api<Colaborador[]>('/colaboradores', { params: { vinculo, q, inativos, zona_id: zona } }) })
   const sups = useQuery({ queryKey: ['supervisores'], queryFn: () => api<IdNome[]>('/utilizadores/supervisores') })
   const itens = lista.data ?? []
   const atual = itens.find((c) => c.id === sel) ?? itens[0]
@@ -42,12 +46,17 @@ export default function Colaboradores() {
               <Icon name="search" size={16} />
               <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Nome ou n.º" aria-label="Pesquisar colaboradores" className="flex-1 min-w-0 bg-transparent outline-none text-[13.5px] text-ink" />
             </label>
+            <label className={`inline-flex items-center gap-1.5 h-8 pl-2.5 pr-1 rounded-md border text-[13px] ${zona ? 'border-petrol-600 bg-[#E9F4F2] text-petrol-700' : 'border-line-strong bg-white text-ink-80'}`}>Zona:
+              <select value={zona} onChange={(e) => setZona(e.target.value)} className="bg-transparent font-medium text-ink outline-none">
+                <option value="">Todas</option>{zonas.data?.map((z) => <option key={z.id} value={z.id}>{z.nome}</option>)}
+              </select>
+            </label>
             <MostrarInativos value={inativos} onChange={setInativos} />
           </div>
           {lista.isLoading ? <Loading /> : lista.error ? <div className="p-4"><ErrorBox error={lista.error} /></div> : itens.length === 0 ? <Empty title="Sem colaboradores" /> : (
             <div className="overflow-x-auto">
               <table className="tbl">
-                <thead><tr><th>Colaborador</th><th>Vínculo</th><th>Disponibilidade</th><th>Supervisor</th><th className="text-right">Custo/hora</th></tr></thead>
+                <thead><tr><th>Colaborador</th><th>Vínculo</th><th>Zona</th><th>Disponibilidade</th><th>Carga afetada/semana</th><th>Supervisor</th><th className="text-right">Custo/hora</th></tr></thead>
                 <tbody>
                   {itens.map((c, i) => (
                     <tr key={c.id} className={`${atual?.id === c.id ? '[&>td]:!bg-[#EAF4F2]' : ''} ${c.ativo ? '' : 'opacity-60'}`}>
@@ -55,11 +64,13 @@ export default function Colaboradores() {
                         <div className="flex items-center gap-2.5">
                           <Avatar nome={c.nome} tone={i} />
                           <div><button type="button" onClick={() => setSel(c.id)} className="font-medium text-[13.5px] hover:text-petrol-600 hover:underline text-left">{c.nome}{!c.ativo && <span className="ml-2 align-middle"><Badge>Inativo</Badge></span>}</button>
-                            <div className="text-xs text-ink-60">N.º {c.numero}{c.funcao ? ` · ${c.funcao}` : ''}{c.zona ? ` · ${c.zona.nome}` : ''}</div></div>
+                            <div className="text-xs text-ink-60">N.º {c.numero}{c.funcao ? ` · ${c.funcao}` : ''}</div></div>
                         </div>
                       </td>
                       <td><Badge tone={VINCULO[c.vinculo].tone}>{VINCULO[c.vinculo].label}</Badge></td>
+                      <td className="text-[12.5px]">{c.zona?.nome ?? <span className="text-ink-60">—</span>}</td>
                       <td><Disp d={c.disponibilidade} /></td>
+                      <td><Carga h={Number(c.horas_afetadas)} prestador={c.vinculo === 'recibos_verdes'} /></td>
                       <td className="text-[12.5px] text-ink-60">{nomeSup(c.supervisor_id)}</td>
                       <td className="text-right num">{eur(c.custo_hora)}</td>
                     </tr>
@@ -89,6 +100,8 @@ export default function Colaboradores() {
                 <div key={k} className="min-w-0"><dt className="text-xs text-ink-60">{k}</dt><dd className="text-[13.5px] font-medium truncate">{v}</dd></div>
               ))}
             </dl>
+            <Afetacoes id={atual.id} total={Number(atual.horas_afetadas)} prestador={atual.vinculo === 'recibos_verdes'}
+              onPlaneamento={() => nav(`/planeamento?colaborador=${atual.id}${atual.zona_id ? `&zona=${atual.zona_id}` : ''}`)} />
             <div className="px-[18px] py-3.5 border-t border-line-soft">
               <div className="text-[13px] font-semibold mb-2">Disponibilidade semanal</div>
               <Disp d={atual.disponibilidade} big />
@@ -101,6 +114,41 @@ export default function Colaboradores() {
       </div>
       {edit && <ColabDialog c={edit === 'novo' ? null : edit} onClose={() => setEdit(null)} />}
     </>
+  )
+}
+
+function Carga({ h, prestador }: { h: number; prestador: boolean }) {
+  const pct = (h / 40) * 100
+  return (
+    <div className="flex items-center gap-2 min-w-[120px]">
+      <span className="num text-[13px] font-medium w-11">{horas(h)}</span>
+      {!prestador && <div className="flex-1"><Bar pct={pct} tone={pct > 100 ? 'err' : pct >= 95 ? 'warn' : 'ok'} /></div>}
+      {prestador && <span className="text-xs text-ink-60">prestador</span>}
+    </div>
+  )
+}
+
+type Af = { linha_id: number; loja: string; cliente: string; contrato_id: number; contrato_numero: string; tipo: 'REP' | 'PRO' | 'LOG' | 'EQF'; horas_semana: number; dias: string[]; desde: string; ate: string | null }
+function Afetacoes({ id, total, prestador, onPlaneamento }: { id: number; total: number; prestador: boolean; onPlaneamento: () => void }) {
+  const q = useQuery({ queryKey: ['colaborador-afetacoes', id], queryFn: () => api<Af[]>(`/colaboradores/${id}/afetacoes`) })
+  return (
+    <div className="px-[18px] py-3.5 border-t border-line-soft">
+      <div className="flex items-center gap-2 mb-2">
+        <div className="text-[13px] font-semibold">Lojas afetas</div>
+        <span className="text-[12.5px] text-ink-60 num">{horas(total)} por semana{prestador ? '' : ' de 40 h'}</span>
+        <span className="flex-1" />
+        <Button size="sm" icon="cal" onClick={onPlaneamento}>Ver no planeamento</Button>
+      </div>
+      <ul className="flex flex-col gap-2">
+        {q.data?.map((a) => (
+          <li key={a.linha_id} className="text-[13px]">
+            <div className="flex items-center gap-2"><span className={`w-2 h-2 rounded-sm ${AREA[a.tipo].sq}`} /><span className="font-medium">{a.loja}</span><span className="flex-1" /><span className="num">{horas(a.horas_semana)}</span></div>
+            <div className="text-xs text-ink-60 ml-4">{a.cliente} · <Link to={`/contratos/${a.contrato_id}`} className="font-mono text-petrol-600 hover:underline">{a.contrato_numero}</Link> · {a.dias.join(', ')}{a.ate ? ` · até ${dataCurta(a.ate)}` : ''}</div>
+          </li>
+        ))}
+        {q.data?.length === 0 && <li className="text-[12.5px] text-ink-60">Sem lojas afetas. Use "Ver no planeamento" para lhe atribuir serviços por atribuir.</li>}
+      </ul>
+    </div>
   )
 }
 

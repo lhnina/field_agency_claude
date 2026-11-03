@@ -143,3 +143,37 @@ def test_candidatos_explicaveis(mundo):
     assert res[0]["colaborador_id"] == mundo.pedro.id
     assert "Mesma zona da loja" in res[0]["motivos"]
     assert mundo.ines.id not in [r["colaborador_id"] for r in res]
+
+
+def test_filtros_do_planeamento_combinam_com_and(mundo):
+    from app.models import Cliente, Contrato, EstadoContrato, TipoContrato
+    outro_cli = Cliente(tenant_id=mundo.t.id, nome="Outro Cliente")
+    mundo.db.add(outro_cli)
+    mundo.db.flush()
+    c2 = Contrato(tenant_id=mundo.t.id, numero="CT-REP-2026/0009", tipo=TipoContrato.REP, cliente_id=outro_cli.id,
+                  data=date(2026, 1, 1), inicio=date(2026, 1, 1), estado=EstadoContrato.ativo)
+    mundo.db.add(c2)
+    mundo.db.flush()
+    a = nova_linha(mundo, [2, 0, 0, 0, 0, 0, 0])                      # cliente principal, Inês
+    b = nova_linha(mundo, [0, 2, 0, 0, 0, 0, 0], loja=mundo.loja2)    # cliente principal, por atribuir
+    from app.models import LinhaContrato
+    c = LinhaContrato(tenant_id=mundo.t.id, contrato_id=c2.id, loja_id=mundo.loja.id, inicio=SEG, preco_hora=D("18"), h_qua=D("2"))
+    mundo.db.add(c)
+    mundo.db.flush()
+    op.afetar(mundo.db, mundo.gestor, a, mundo.ines, SEG)
+    op.afetar(mundo.db, mundo.gestor, c, mundo.pedro, SEG)            # Pedro (mesma equipa) só no outro cliente
+    for ln in (a, b, c):
+        op.gerar_ocorrencias(mundo.db, ln, ate=SEG + timedelta(days=6))
+    v = op.planeamento_semana(mundo.db, mundo.gestor, SEG,
+                              op.FiltroPlaneamento(cliente_id=mundo.cliente.id, supervisor_id=mundo.sup1.id))
+    assert {x["id"] for x in v["colaboradores"]} == {mundo.ines.id}      # Pedro não aparece: não tem serviços deste cliente
+    assert {o["cliente"] for o in v["ocorrencias"] + v["por_atribuir"]} == {"Bom Grão Cafés"}
+    assert len(v["por_atribuir"]) == 1
+    # só supervisor: mostra toda a equipa, mesmo sem serviços
+    v = op.planeamento_semana(mundo.db, mundo.gestor, SEG, op.FiltroPlaneamento(supervisor_id=mundo.sup1.id))
+    assert {x["id"] for x in v["colaboradores"]} == {mundo.ines.id, mundo.pedro.id}
+    # vista de um colaborador: só ele + serviços por atribuir da zona
+    v = op.planeamento_semana(mundo.db, mundo.gestor, SEG, op.FiltroPlaneamento(colaborador_ids=[mundo.pedro.id], zona_id=mundo.zona.id))
+    assert [x["id"] for x in v["colaboradores"]] == [mundo.pedro.id]
+    assert {o["colaborador_id"] for o in v["ocorrencias"]} == {mundo.pedro.id}
+    assert len(v["por_atribuir"]) == 1

@@ -136,6 +136,7 @@ class ColaboradorIn(BaseModel):
 class ColaboradorOut(ColaboradorIn, ORM):
     id: int
     zona: IdNome | None = None
+    horas_afetadas: Decimal = Decimal("0")  # soma das horas/semana das lojas em que está afeto hoje
 
 
 # ---------------------------------------------------------------- contratos

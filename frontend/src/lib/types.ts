@@ -21,6 +21,7 @@ export type Colaborador = {
   id: number; numero: string; nome: string; funcao: string | null; email: string | null; telefone: string | null
   vinculo: Vinculo; data_inicio: string | null; data_fim_vinculo: string | null; zona_id: number | null
   supervisor_id: number | null; custo_hora: string; disponibilidade: string; ativo: boolean; zona: IdNome | null
+  horas_afetadas: string
 }
 
 export type Afetacao = { id: number; colaborador_id: number; colaborador_nome: string; desde: string; ate: string | null }

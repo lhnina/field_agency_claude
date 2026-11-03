@@ -19,11 +19,12 @@ router = APIRouter(tags=["operação"])
 
 @router.get("/planeamento")
 def planeamento(inicio: date | None = None, zona_id: int | None = None, cliente_id: int | None = None,
-                supervisor_id: int | None = None, tipo: str | None = None,
+                supervisor_id: int | None = None, tipo: str | None = None, colaborador_id: int | None = None,
                 user: User = Depends(requer("planeamento.ler")), db: Session = Depends(get_db)):
     d = inicio or date.today()
     segunda = d - timedelta(days=d.weekday())
-    return op.planeamento_semana(db, user, segunda, op.FiltroPlaneamento(zona_id, cliente_id, supervisor_id, tipo))
+    return op.planeamento_semana(db, user, segunda, op.FiltroPlaneamento(
+        zona_id, cliente_id, supervisor_id, tipo, [colaborador_id] if colaborador_id else []))
 
 
 def _oc(db: Session, oid: int, user: User) -> Ocorrencia:

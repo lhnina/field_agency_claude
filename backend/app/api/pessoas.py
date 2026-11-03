@@ -1,12 +1,15 @@
 from datetime import date
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.api.base import obter
 from app.db import get_db
-from app.models import Afetacao, Ausencia, Colaborador, EstadoOcorrencia, Ocorrencia, Perfil, User
+from app.models import (
+    Afetacao, Ausencia, Colaborador, Contrato, EstadoContrato, EstadoOcorrencia, LinhaContrato, Ocorrencia, Perfil, User,
+)
 from app.schemas import AusenciaIn, AusenciaOut, ColaboradorIn, ColaboradorOut, EstadoAtivoIn
 from app.security import requer
 from app.services import operacao as op
@@ -32,7 +35,48 @@ def listar(q: str | None = None, vinculo: str | None = None, zona_id: int | None
         s = s.where(Colaborador.vinculo == vinculo)
     if zona_id:
         s = s.where(Colaborador.zona_id == zona_id)
-    return db.scalars(s.order_by(Colaborador.ativo.desc(), Colaborador.nome)).all()
+    out = [ColaboradorOut.model_validate(c) for c in db.scalars(s.order_by(Colaborador.ativo.desc(), Colaborador.nome)).all()]
+    carga = _carga(db, [c.id for c in out])
+    for c in out:
+        c.horas_afetadas = carga.get(c.id, Decimal("0"))
+    return out
+
+
+def _afetacoes_vigentes(db: Session, ids: list[int]) -> list[Afetacao]:
+    hoje = date.today()
+    if not ids:
+        return []
+    return db.scalars(select(Afetacao).join(LinhaContrato).join(Contrato).options(
+        joinedload(Afetacao.linha).joinedload(LinhaContrato.loja),
+        joinedload(Afetacao.linha).joinedload(LinhaContrato.contrato).joinedload(Contrato.cliente)).where(
+        Afetacao.colaborador_id.in_(ids), Afetacao.desde <= hoje, or_(Afetacao.ate.is_(None), Afetacao.ate >= hoje),
+        Contrato.estado == EstadoContrato.ativo, LinhaContrato.inicio <= hoje,
+        or_(LinhaContrato.fim.is_(None), LinhaContrato.fim >= hoje),
+        or_(Contrato.fim.is_(None), Contrato.fim >= hoje))).unique().all()
+
+
+def _carga(db: Session, ids: list[int]) -> dict[int, Decimal]:
+    out: dict[int, Decimal] = {}
+    for a in _afetacoes_vigentes(db, ids):
+        out[a.colaborador_id] = out.get(a.colaborador_id, Decimal("0")) + a.linha.horas_semana
+    return out
+
+
+@router.get("/colaboradores/{cid}/afetacoes")
+def afetacoes(cid: int, user: User = Depends(requer("colaboradores.ler")), db: Session = Depends(get_db)):
+    """Lojas em que o colaborador está afeto hoje, com as horas de cada dia."""
+    c = obter(db, Colaborador, cid, user)
+    if user.perfil == Perfil.supervisor and c.supervisor_id != user.id:
+        raise HTTPException(404, "Registo não encontrado")
+    dias = ("Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom")
+    res = []
+    for a in _afetacoes_vigentes(db, [c.id]):
+        ln = a.linha
+        res.append({"linha_id": ln.id, "loja": ln.loja.nome, "cliente": ln.contrato.cliente.nome, "contrato_id": ln.contrato_id,
+                    "contrato_numero": ln.contrato.numero, "tipo": ln.contrato.tipo.value, "horas_semana": float(ln.horas_semana),
+                    "dias": [f"{d} {float(ln.horas_dia(i)):g}h".replace(".", ",") for i, d in enumerate(dias) if ln.horas_dia(i) > 0],
+                    "desde": a.desde.isoformat(), "ate": a.ate.isoformat() if a.ate else None})
+    return sorted(res, key=lambda x: (x["cliente"], x["loja"]))
 
 
 @router.get("/colaboradores/{cid}", response_model=ColaboradorOut)
@@ -40,7 +84,9 @@ def detalhe(cid: int, user: User = Depends(requer("colaboradores.ler")), db: Ses
     c = obter(db, Colaborador, cid, user)
     if user.perfil == Perfil.supervisor and c.supervisor_id != user.id:
         raise HTTPException(404, "Registo não encontrado")
-    return c
+    out = ColaboradorOut.model_validate(c)
+    out.horas_afetadas = _carga(db, [c.id]).get(c.id, Decimal("0"))
+    return out
 
 
 @router.post("/colaboradores", response_model=ColaboradorOut, status_code=201)

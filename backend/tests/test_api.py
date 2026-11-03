@@ -57,3 +57,30 @@ def test_supervisor_nao_afeta_colaborador_de_outra_equipa(client, mundo):
     h = token(client, "s1@t.pt")
     r = client.post(f"/api/linhas/{ln.id}/afetacao", headers=h, json={"colaborador_id": mundo.outro.id, "desde": str(date(2026, 11, 2))})
     assert r.status_code == 403
+
+
+def test_colaboradores_carga_afetada_e_filtro_zona(client, mundo):
+    from datetime import date as d_
+    from app.models import Zona
+    from app.services import operacao as op
+    from tests.conftest import nova_linha
+    hoje = d_.today()
+    a = nova_linha(mundo, [1.5, 0, 1.5, 0, 0, 0, 0], inicio=hoje)
+    b = nova_linha(mundo, [0, 0, 0, 3, 0, 0, 0], loja=mundo.loja2, inicio=hoje)
+    for ln in (a, b):
+        op.afetar(mundo.db, mundo.gestor, ln, mundo.ines, hoje)
+    outra = Zona(tenant_id=mundo.t.id, nome="Sintra")
+    mundo.db.add(outra)
+    mundo.db.flush()
+    mundo.outro.zona_id = outra.id
+    mundo.db.commit()
+    h = token(client, "g@t.pt")
+    lista = {c["nome"]: c for c in client.get("/api/colaboradores", headers=h).json()}
+    assert float(lista["Inês"]["horas_afetadas"]) == 6.0 and float(lista["Pedro"]["horas_afetadas"]) == 0
+    assert lista["Outra equipa"]["zona"]["nome"] == "Sintra"
+    so_sintra = client.get("/api/colaboradores", headers=h, params={"zona_id": outra.id}).json()
+    assert [c["nome"] for c in so_sintra] == ["Outra equipa"]
+    af = client.get(f"/api/colaboradores/{mundo.ines.id}/afetacoes", headers=h).json()
+    assert len(af) == 2 and sum(x["horas_semana"] for x in af) == 6.0
+    r = client.get("/api/planeamento", headers=h, params={"colaborador_id": mundo.ines.id, "inicio": hoje.isoformat()})
+    assert [c["id"] for c in r.json()["colaboradores"]] == [mundo.ines.id]

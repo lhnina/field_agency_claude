@@ -315,7 +315,10 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
                   joinedload(Ocorrencia.linha).joinedload(LinhaContrato.contrato).joinedload(Contrato.cliente))
          .where(Ocorrencia.tenant_id == user.tenant_id, Ocorrencia.data.between(segunda, dom),
                 Ocorrencia.estado != EstadoOcorrencia.cancelado))
-    if f.zona_id:
+    # Todos os filtros combinam-se (E). Na vista de um colaborador, a zona só filtra
+    # os serviços por atribuir: os serviços dele aparecem em qualquer zona.
+    alvo = set(f.colaborador_ids)
+    if f.zona_id and not alvo:
         q = q.where(Loja.zona_id == f.zona_id)
     if f.cliente_id:
         q = q.where(Contrato.cliente_id == f.cliente_id)
@@ -324,18 +327,27 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
     ocorrencias = db.scalars(q.order_by(Ocorrencia.data, Ocorrencia.hora_inicio)).unique().all()
 
     sup = user.id if user.perfil == Perfil.supervisor else f.supervisor_id
-    colabs_q = select(Colaborador).where(Colaborador.tenant_id == user.tenant_id, Colaborador.ativo.is_(True))
+    equipa: set[int] | None = None
     if sup:
-        colabs_q = colabs_q.where(Colaborador.supervisor_id == sup)
-    equipa = {c.id: c for c in db.scalars(colabs_q).all()} if sup else None
+        equipa = set(db.scalars(select(Colaborador.id).where(
+            Colaborador.tenant_id == user.tenant_id, Colaborador.ativo.is_(True), Colaborador.supervisor_id == sup)).all())
 
-    if equipa is not None:
-        ocorrencias = [o for o in ocorrencias if (o.colaborador_id in equipa)
-                       or (o.colaborador_id is None and o.linha.loja.supervisor_id == sup)]
+    def visivel(o: Ocorrencia) -> bool:
+        cid = o.colaborador_id
+        if cid is None:  # por atribuir: lojas do supervisor e, na vista de colaborador, da zona escolhida
+            if sup and o.linha.loja.supervisor_id != sup:
+                return False
+            return not (alvo and f.zona_id and o.linha.loja.zona_id != f.zona_id)
+        if equipa is not None and cid not in equipa:
+            return False
+        return not alvo or cid in alvo
 
+    ocorrencias = [o for o in ocorrencias if visivel(o)]
     ids = {o.colaborador_id for o in ocorrencias if o.colaborador_id}
-    if equipa is not None:
-        ids |= set(equipa)
+    if alvo:  # o colaborador aparece mesmo sem serviços nesta semana
+        ids |= alvo if equipa is None else (alvo & equipa)
+    elif equipa is not None and not (f.cliente_id or f.zona_id or f.tipo):
+        ids |= equipa  # só o supervisor filtrado: mostra a equipa toda, para poder afetar
     colabs = {c.id: c for c in db.scalars(select(Colaborador).where(Colaborador.id.in_(ids))).all()} if ids else {}
     ausencias = _ausentes(db, user.tenant_id, segunda, dom)
 

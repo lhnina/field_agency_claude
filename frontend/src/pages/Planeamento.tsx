@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AreaBadge, Avatar, Badge, Button, Card, ErrorBox, Icon, IconButton, Loading, Modal, PageHeader, Seg, useToast } from '../components/ui'
 import { api } from '../lib/api'
@@ -17,9 +17,12 @@ const ALERTA: Record<string, string> = {
 export default function Planeamento() {
   const qc = useQueryClient()
   const toast = useToast()
+  const [sp, setSp] = useSearchParams()
   const [inicio, setInicio] = useState(() => iso(segunda(new Date())))
   const [tipo, setTipo] = useState<string>('')
-  const [zona, setZona] = useState('')
+  const [zona, setZona] = useState(sp.get('zona') ?? '')
+  const colaborador = sp.get('colaborador') ?? ''
+  const limparColaborador = () => { sp.delete('colaborador'); sp.delete('zona'); setSp(sp, { replace: true }) }
   const [cliente, setCliente] = useState('')
   const [supervisor, setSupervisor] = useState('')
   const [sel, setSel] = useState<number | null>(null)
@@ -27,7 +30,7 @@ export default function Planeamento() {
   const [subst, setSubst] = useState<Ocorrencia | null>(null)
   const [dragOver, setDragOver] = useState<string | null>(null)
 
-  const params = { inicio, tipo, zona_id: zona, cliente_id: cliente, supervisor_id: supervisor }
+  const params = { inicio, tipo, zona_id: zona, cliente_id: cliente, supervisor_id: supervisor, colaborador_id: colaborador }
   const q = useQuery({ queryKey: ['planeamento', params], queryFn: () => api<Plan>('/planeamento', { params }) })
   const zonas = useQuery({ queryKey: ['zonas'], queryFn: () => api<IdNome[]>('/zonas') })
   const clientes = useQuery({ queryKey: ['clientes'], queryFn: () => api<Cliente[]>('/clientes') })
@@ -93,10 +96,15 @@ export default function Planeamento() {
       </PageHeader>
 
       <div className="flex flex-wrap items-center gap-2">
-        <FiltroSelect label="Zona" value={zona} onChange={setZona} options={zonas.data} />
+        {colaborador && (
+          <button type="button" onClick={limparColaborador} className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-petrol-600 bg-[#E9F4F2] text-[13px] text-petrol-700">
+            Colaborador: <b className="font-medium">{data?.colaboradores.find((c) => String(c.id) === colaborador)?.nome ?? '…'}</b><Icon name="x" size={14} />
+          </button>
+        )}
+        <FiltroSelect label={colaborador ? 'Por atribuir na zona' : 'Zona'} value={zona} onChange={setZona} options={zonas.data} />
         <FiltroSelect label="Cliente" value={cliente} onChange={setCliente} options={clientes.data} />
         <FiltroSelect label="Supervisor" value={supervisor} onChange={setSupervisor} options={sups.data} />
-        {(zona || cliente || supervisor) && <Button variant="ghost" size="sm" onClick={() => { setZona(''); setCliente(''); setSupervisor('') }}>Limpar filtros</Button>}
+        {(zona || cliente || supervisor || colaborador) && <Button variant="ghost" size="sm" onClick={() => { setZona(''); setCliente(''); setSupervisor(''); if (colaborador) limparColaborador() }}>Limpar filtros</Button>}
         <span className="flex-1" />
         {data && <>
           <Badge>{data.resumo.total} turnos · {horas(data.resumo.horas)}</Badge>
