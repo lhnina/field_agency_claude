@@ -50,10 +50,60 @@ def test_supervisor_nao_edita_contratos(client, mundo):
     assert r.status_code == 403
 
 
-def test_supervisor_nao_afeta_colaborador_de_outra_equipa(client, mundo):
+def test_supervisor_nao_afeta_colaborador_de_outra_zona(client, mundo):
     from tests.conftest import nova_linha
     ln = nova_linha(mundo, [2, 0, 0, 0, 0, 0, 0])
     mundo.db.commit()
     h = token(client, "s1@t.pt")
     r = client.post(f"/api/linhas/{ln.id}/afetacao", headers=h, json={"colaborador_id": mundo.outro.id, "desde": str(date(2026, 11, 2))})
-    assert r.status_code == 403
+    assert r.status_code == 404  # colaborador de outra zona: para o supervisor não existe
+
+
+def test_colaboradores_carga_afetada_e_filtro_zona(client, mundo):
+    from datetime import date as d_
+    from app.models import Zona
+    from app.services import operacao as op
+    from tests.conftest import nova_linha
+    hoje = d_.today()
+    a = nova_linha(mundo, [1.5, 0, 1.5, 0, 0, 0, 0], inicio=hoje)
+    b = nova_linha(mundo, [0, 0, 0, 3, 0, 0, 0], loja=mundo.loja2, inicio=hoje)
+    for ln in (a, b):
+        op.afetar(mundo.db, mundo.gestor, ln, mundo.ines, hoje)
+    outra = Zona(tenant_id=mundo.t.id, nome="Sintra")
+    mundo.db.add(outra)
+    mundo.db.flush()
+    mundo.outro.zona_id = outra.id
+    mundo.db.commit()
+    h = token(client, "g@t.pt")
+    lista = {c["nome"]: c for c in client.get("/api/colaboradores", headers=h).json()}
+    assert float(lista["Inês"]["horas_afetadas"]) == 6.0 and float(lista["Pedro"]["horas_afetadas"]) == 0
+    assert lista["Outra equipa"]["zona"]["nome"] == "Sintra"
+    so_sintra = client.get("/api/colaboradores", headers=h, params={"zona_id": outra.id}).json()
+    assert [c["nome"] for c in so_sintra] == ["Outra equipa"]
+    af = client.get(f"/api/colaboradores/{mundo.ines.id}/afetacoes", headers=h).json()
+    assert len(af) == 2 and sum(x["horas_semana"] for x in af) == 6.0
+    r = client.get("/api/planeamento", headers=h, params={"colaborador_id": mundo.ines.id, "inicio": hoje.isoformat()})
+    assert [c["id"] for c in r.json()["colaboradores"]] == [mundo.ines.id]
+
+
+def test_linhas_dentro_da_vigencia_do_contrato(client, mundo):
+    from datetime import date as d_
+    mundo.contrato.inicio, mundo.contrato.fim = d_(2026, 11, 1), d_(2026, 12, 31)
+    mundo.db.commit()
+    h = token(client, "g@t.pt")
+    base = {"loja_id": mundo.loja.id, "preco_hora": 18, "h_seg": 2}
+    url = f"/api/contratos/{mundo.contrato.id}/linhas"
+    r = client.post(url, headers=h, json={**base, "inicio": "2026-10-15"})
+    assert r.status_code == 422 and "antes do início do contrato" in r.text
+    r = client.post(url, headers=h, json={**base, "inicio": "2026-11-02", "fim": "2027-01-15"})
+    assert r.status_code == 422 and "depois do fim do contrato" in r.text
+    r = client.post(url, headers=h, json={**base, "inicio": "2026-11-02", "fim": "2026-12-15"})
+    assert r.status_code == 201
+    lid = r.json()["linhas"][0]["id"]
+    r = client.put(f"/api/linhas/{lid}", headers=h, json={**base, "inicio": "2026-11-02", "fim": "2027-02-01"})
+    assert r.status_code == 422
+    # encurtar o contrato para antes do fim de uma loja é recusado
+    c = r = client.get(f"/api/contratos/{mundo.contrato.id}", headers=h).json()
+    body = {k: c[k] for k in ("tipo", "cliente_id", "marca_id", "descricao", "evento", "data", "inicio", "observacoes")}
+    r = client.put(f"/api/contratos/{mundo.contrato.id}", headers=h, json={**body, "fim": "2026-11-30"})
+    assert r.status_code == 422 and "Continente Amadora" in r.text

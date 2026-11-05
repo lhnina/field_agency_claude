@@ -12,8 +12,8 @@
   .num { font-variant-numeric: tabular-nums; }
   .card { @apply bg-white border border-line rounded-xl; }
   .tbl { @apply w-full border-separate border-spacing-0 text-sm; }
-  .tbl th { @apply text-left font-medium text-xs text-ink-60 px-3 py-2.5 border-b border-line whitespace-nowrap bg-[#FAFBF9]; }
-  .tbl td { @apply px-3 py-2.5 border-b border-line-soft align-middle; }
+  :where(.tbl) th { @apply text-left font-medium text-xs text-ink-60 px-3 py-2.5 border-b border-line whitespace-nowrap bg-[#FAFBF9]; }
+  :where(.tbl) td { @apply px-3 py-2.5 border-b border-line-soft align-middle; }
   .tbl tbody tr:hover td { @apply bg-[#F6F8F7]; }
   .tbl tr:last-child td { @apply border-b-0; }
   .inp { @apply h-9 w-full rounded-md border border-line-strong bg-white px-3 text-[13.5px] text-ink placeholder:text-ink-60

@@ -49,10 +49,13 @@ def mundo(db):
     m.gestor = User(tenant_id=T, email="g@t.pt", nome="Gestor", password_hash=pw, perfil=Perfil.gestor)
     m.sup1 = User(tenant_id=T, email="s1@t.pt", nome="Sup 1", password_hash=pw, perfil=Perfil.supervisor)
     m.sup2 = User(tenant_id=T, email="s2@t.pt", nome="Sup 2", password_hash=pw, perfil=Perfil.supervisor)
-    db.add_all([m.gestor, m.sup1, m.sup2])
+    m.gc = User(tenant_id=T, email="gc@t.pt", nome="Joana Pires", password_hash=pw, perfil=Perfil.gestor_conta)
+    db.add_all([m.gestor, m.sup1, m.sup2, m.gc])
     m.zona = Zona(tenant_id=T, nome="Amadora")
-    db.add(m.zona)
+    m.zona2 = Zona(tenant_id=T, nome="Sintra")
+    db.add_all([m.zona, m.zona2])
     db.flush()
+    m.sup1.zona_id, m.sup2.zona_id = m.zona.id, m.zona2.id
     m.loja = Loja(tenant_id=T, nome="Continente Amadora", zona_id=m.zona.id, supervisor_id=m.sup1.id)
     m.loja2 = Loja(tenant_id=T, nome="Pingo Doce Alfragide", zona_id=m.zona.id, supervisor_id=m.sup1.id)
     m.cliente = Cliente(tenant_id=T, nome="Bom Grão Cafés")
@@ -62,7 +65,7 @@ def mundo(db):
                          supervisor_id=m.sup1.id, custo_hora=D("11.40"))
     m.pedro = Colaborador(tenant_id=T, numero="2", nome="Pedro", vinculo=TipoVinculo.sem_termo, zona_id=m.zona.id,
                           supervisor_id=m.sup1.id, custo_hora=D("11.90"))
-    m.outro = Colaborador(tenant_id=T, numero="3", nome="Outra equipa", vinculo=TipoVinculo.sem_termo,
+    m.outro = Colaborador(tenant_id=T, numero="3", nome="Outra equipa", vinculo=TipoVinculo.sem_termo, zona_id=m.zona2.id,
                           supervisor_id=m.sup2.id, custo_hora=D("11.00"))
     db.add_all([m.ines, m.pedro, m.outro])
     m.contrato = Contrato(tenant_id=T, numero="CT-REP-2026/0001", tipo=TipoContrato.REP, cliente_id=m.cliente.id,

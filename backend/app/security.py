@@ -45,12 +45,27 @@ PERMISSOES: dict[str, set[Perfil]] = {
     "dados_mestre.editar": {Perfil.administrador, Perfil.gestor},
     "colaboradores.ler": {Perfil.administrador, Perfil.direcao, Perfil.gestor, Perfil.supervisor, Perfil.rh},
     "colaboradores.editar": {Perfil.administrador, Perfil.gestor, Perfil.rh},
+    # Documentação: tipos e requisitos (configuração) e registo dos documentos entregues
+    "documentos.configurar": {Perfil.administrador, Perfil.gestor, Perfil.rh},
+    "documentos.editar": {Perfil.administrador, Perfil.gestor, Perfil.rh, Perfil.supervisor},
     "contratos.ler": {Perfil.administrador, Perfil.direcao, Perfil.gestor, Perfil.financeiro, Perfil.supervisor},
     "contratos.editar": {Perfil.administrador, Perfil.gestor},
     "planeamento.ler": {Perfil.administrador, Perfil.direcao, Perfil.gestor, Perfil.supervisor},
     "planeamento.editar": {Perfil.administrador, Perfil.gestor, Perfil.supervisor},
     "ausencias.editar": {Perfil.administrador, Perfil.gestor, Perfil.supervisor, Perfil.rh},
+    # Q5: supervisor e gestor validam horas
+    "validacao.ler": {Perfil.administrador, Perfil.direcao, Perfil.gestor, Perfil.supervisor, Perfil.financeiro, Perfil.rh},
+    "validacao.editar": {Perfil.administrador, Perfil.gestor, Perfil.supervisor},
+    "financeiro.ler": {Perfil.administrador, Perfil.direcao, Perfil.gestor, Perfil.financeiro},
+    "remuneracoes.ler": {Perfil.administrador, Perfil.direcao, Perfil.gestor, Perfil.financeiro, Perfil.rh},
+    "periodo.fechar": {Perfil.administrador, Perfil.direcao, Perfil.financeiro},
 }
+
+
+# O gestor de conta tem os mesmos acessos do gestor operacional (o âmbito por cliente está em app/ambito.py).
+for _perfis in PERMISSOES.values():
+    if Perfil.gestor in _perfis:
+        _perfis.add(Perfil.gestor_conta)
 
 
 def requer(permissao: str):

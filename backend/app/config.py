@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expires_minutes: int = 60 * 10
     cors_origins: list[str] = ["http://localhost:5173"]
+    # Modo de desenvolvimento: aplica as migrações ao arrancar/recarregar a API
+    auto_migrate: bool = False
     # Horizonte por defeito para gerar ocorrências (dias a partir de hoje)
     horizonte_planeamento_dias: int = 56
     # Limites laborais (Código do Trabalho; sem IRCT aplicável)

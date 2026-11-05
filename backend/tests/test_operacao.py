@@ -143,3 +143,77 @@ def test_candidatos_explicaveis(mundo):
     assert res[0]["colaborador_id"] == mundo.pedro.id
     assert "Mesma zona da loja" in res[0]["motivos"]
     assert mundo.ines.id not in [r["colaborador_id"] for r in res]
+
+
+def test_filtros_do_planeamento_combinam_com_and(mundo):
+    from app.models import Cliente, Contrato, EstadoContrato, TipoContrato
+    outro_cli = Cliente(tenant_id=mundo.t.id, nome="Outro Cliente")
+    mundo.db.add(outro_cli)
+    mundo.db.flush()
+    c2 = Contrato(tenant_id=mundo.t.id, numero="CT-REP-2026/0009", tipo=TipoContrato.REP, cliente_id=outro_cli.id,
+                  data=date(2026, 1, 1), inicio=date(2026, 1, 1), estado=EstadoContrato.ativo)
+    mundo.db.add(c2)
+    mundo.db.flush()
+    a = nova_linha(mundo, [2, 0, 0, 0, 0, 0, 0])                      # cliente principal, Inês
+    b = nova_linha(mundo, [0, 2, 0, 0, 0, 0, 0], loja=mundo.loja2)    # cliente principal, por atribuir
+    from app.models import LinhaContrato
+    c = LinhaContrato(tenant_id=mundo.t.id, contrato_id=c2.id, loja_id=mundo.loja.id, inicio=SEG, preco_hora=D("18"), h_qua=D("2"))
+    mundo.db.add(c)
+    mundo.db.flush()
+    op.afetar(mundo.db, mundo.gestor, a, mundo.ines, SEG)
+    op.afetar(mundo.db, mundo.gestor, c, mundo.pedro, SEG)            # Pedro (mesma equipa) só no outro cliente
+    for ln in (a, b, c):
+        op.gerar_ocorrencias(mundo.db, ln, ate=SEG + timedelta(days=6))
+    v = op.planeamento_semana(mundo.db, mundo.gestor, SEG,
+                              op.FiltroPlaneamento(cliente_id=mundo.cliente.id, supervisor_id=mundo.sup1.id))
+    assert {x["id"] for x in v["colaboradores"]} == {mundo.ines.id}      # Pedro não aparece: não tem serviços deste cliente
+    assert {o["cliente"] for o in v["ocorrencias"] + v["por_atribuir"]} == {"Bom Grão Cafés"}
+    assert len(v["por_atribuir"]) == 1
+    # só supervisor: mostra toda a equipa, mesmo sem serviços
+    v = op.planeamento_semana(mundo.db, mundo.gestor, SEG, op.FiltroPlaneamento(supervisor_id=mundo.sup1.id))
+    assert {x["id"] for x in v["colaboradores"]} == {mundo.ines.id, mundo.pedro.id}
+    # vista de um colaborador: só ele + serviços por atribuir da zona
+    v = op.planeamento_semana(mundo.db, mundo.gestor, SEG, op.FiltroPlaneamento(colaborador_ids=[mundo.pedro.id], zona_id=mundo.zona.id))
+    assert [x["id"] for x in v["colaboradores"]] == [mundo.pedro.id]
+    assert {o["colaborador_id"] for o in v["ocorrencias"]} == {mundo.pedro.id}
+    assert len(v["por_atribuir"]) == 1
+
+
+def test_so_contratos_em_curso_aparecem_no_planeamento(mundo):
+    from app.models import EstadoContrato
+    ln = nova_linha(mundo, [4, 0, 0, 0, 0, 0, 0])
+    op.afetar(mundo.db, mundo.gestor, ln, mundo.ines, SEG)
+    op.gerar_ocorrencias(mundo.db, ln, ate=SEG + timedelta(days=6))
+    assert op.planeamento_semana(mundo.db, mundo.gestor, SEG, op.FiltroPlaneamento())["ocorrencias"]
+    for est in (EstadoContrato.proposta, EstadoContrato.suspenso, EstadoContrato.terminado):
+        mundo.contrato.estado = est
+        mundo.db.flush()
+        assert op.planeamento_semana(mundo.db, mundo.gestor, SEG, op.FiltroPlaneamento())["ocorrencias"] == []
+    mundo.contrato.estado = EstadoContrato.ativo  # retomar: as ocorrências mantêm-se
+    mundo.db.flush()
+    assert op.planeamento_semana(mundo.db, mundo.gestor, SEG, op.FiltroPlaneamento())["ocorrencias"]
+
+
+def test_data_de_saida_termina_afetacoes_e_desativa(mundo):
+    import pytest
+    hoje = date.today()
+    ln = nova_linha(mundo, [4, 4, 4, 4, 4, 0, 0], inicio=hoje - timedelta(days=14))
+    op.afetar(mundo.db, mundo.gestor, ln, mundo.ines, hoje - timedelta(days=14))
+    op.gerar_ocorrencias(mundo.db, ln, ate=hoje + timedelta(days=20))
+    # saída futura: afetação termina nessa data, os serviços seguintes ficam por atribuir, continua ativa
+    mundo.ines.data_saida = hoje + timedelta(days=5)
+    r = op.aplicar_saida(mundo.db, mundo.gestor, mundo.ines)
+    assert r["afetacoes"] == 1 and r["servicos"] > 0 and not r["desativado"] and mundo.ines.ativo
+    depois = [o for o in ocs(mundo, ln) if o.data > mundo.ines.data_saida]
+    antes = [o for o in ocs(mundo, ln) if hoje <= o.data <= mundo.ines.data_saida]
+    assert depois and all(o.colaborador_id is None for o in depois)
+    assert all(o.colaborador_id == mundo.ines.id for o in antes)
+    # não pode ser afeta nem substituir depois da saída
+    with pytest.raises(ValueError):
+        op.afetar(mundo.db, mundo.gestor, ln, mundo.ines, hoje + timedelta(days=6))
+    with pytest.raises(ValueError):
+        op.substituir(mundo.db, mundo.gestor, depois[0], mundo.ines.id, "teste")
+    # saída passada: desativa
+    mundo.ines.data_saida = hoje - timedelta(days=1)
+    op.aplicar_saidas(mundo.db, mundo.t.id)
+    assert not mundo.ines.ativo

@@ -1,0 +1,55 @@
+const { chromium } = require('playwright');
+const BASE = 'http://localhost:5173'
+;(async () => {
+  const b = await chromium.launch(); const p = await b.newPage({ viewport: { width: 1500, height: 950 }, locale: 'pt-PT' })
+  const erros = []; p.on('pageerror', (e) => erros.push(e.message)); p.on('console', (m) => m.type() === 'error' && erros.push(m.text()))
+  await p.goto(BASE + '/login'); await p.fill('input[type=email]', 'hugo@promovida.pt'); await p.fill('input[type=password]', 'demo1234')
+  await p.click('button[type=submit]'); await p.waitForURL(BASE + '/')
+  // --- semana
+  await p.getByRole('link', { name: 'Equipas fixas' }).click(); await p.waitForSelector('table.tbl tbody tr'); await p.waitForTimeout(500)
+  console.log('linhas semana:', (await p.locator('table.tbl tbody tr td:first-child').allInnerTexts()).map((t) => t.split('\n')[0]).join(', '))
+  await p.screenshot({ path: '/tmp/shots/eqf-semana.png' })
+  // abre um dia, substitui e valida
+  await p.locator('table.tbl tbody tr').first().locator('td button').first().click(); const d = p.getByRole('dialog'); await d.waitFor()
+  await p.waitForTimeout(400); await p.screenshot({ path: '/tmp/shots/eqf-dia.png' })
+  await d.getByRole('button', { name: 'Registar falta' }).click(); await d.getByLabel('Motivo da falta').fill('Doença')
+  await d.getByRole('button', { name: 'Registar falta' }).click(); await p.waitForSelector('text=Falta registada')
+  await p.waitForTimeout(400)
+  const antes = await p.locator('text=/dia\\(s\\) já passados por validar/').count()
+  if (antes) { await p.getByRole('button', { name: 'Validar todos' }).click(); console.log('validar todos:', await (await p.waitForSelector('text=/dia\\(s\\) validado/')).innerText()) }
+  // --- contrato EQF
+  await p.goto(BASE + '/contratos'); await p.getByRole('tab', { name: 'Equipas Fixas' }).click().catch(() => {}); await p.waitForTimeout(400)
+  await p.locator('table.tbl tbody tr', { hasText: 'Montado Vinhos' }).first().locator('a, button').first().click(); await p.waitForURL(/contratos\/\d+/); await p.waitForTimeout(800)
+  console.log('kpis contrato:', (await p.locator('.grid.grid-cols-2').first().innerText()).replace(/\n/g, ' | '))
+  await p.screenshot({ path: '/tmp/shots/eqf-contrato.png' })
+  await p.getByRole('button', { name: 'Editar Miguel Rocha' }).click(); await p.getByRole('dialog').waitFor(); await p.waitForTimeout(300)
+  await p.screenshot({ path: '/tmp/shots/eqf-escala.png' })
+  await p.getByRole('dialog').getByRole('button', { name: 'Cancelar' }).click()
+  await p.getByRole('tab', { name: /^Rotas/ }).click(); await p.waitForTimeout(300); await p.screenshot({ path: '/tmp/shots/eqf-rotas.png' })
+  await p.getByRole('tab', { name: 'Despesas' }).click(); await p.waitForTimeout(400)
+  await p.getByRole('button', { name: 'Registar despesa' }).click(); const dd = p.getByRole('dialog'); await dd.waitFor()
+  await dd.getByLabel('Valor (€)').fill('45,90'); await dd.getByLabel('Tipo').selectOption('combustivel'); await dd.getByRole('button', { name: 'Guardar' }).click()
+  await p.waitForSelector('text=Despesa registada'); await p.waitForTimeout(400)
+  console.log('despesas:', (await p.locator('tfoot').innerText()).replace(/\s+/g, ' '))
+  await p.screenshot({ path: '/tmp/shots/eqf-despesas.png' })
+  // --- novo contrato EQF do zero
+  await p.goto(BASE + '/contratos'); await p.getByRole('button', { name: 'Novo contrato' }).click(); const n = p.getByRole('dialog'); await n.waitFor()
+  await n.getByLabel('Tipo').selectOption('EQF'); await n.getByLabel('Cliente').selectOption({ label: 'Pura Higiene' })
+  await n.getByLabel('Valor de gestão (€/colaborador/mês)').fill('250'); await n.getByRole('button', { name: 'Criar contrato' }).click()
+  await p.waitForURL(/contratos\/\d+/); await p.waitForTimeout(600)
+  await p.getByRole('tab', { name: /^Rotas/ }).click(); await p.getByRole('button', { name: 'Nova rota' }).click(); const rd = p.getByRole('dialog'); await rd.waitFor()
+  await rd.getByLabel('Nome da rota').fill('Rota Sintra')
+  for (const l of ['Continente Sintra', 'Auchan Sintra']) { await rd.getByLabel('Acrescentar loja').fill(l.split(' ')[1] === 'Sintra' ? l : l); await p.waitForTimeout(600); await p.getByRole('option', { name: new RegExp(l) }).first().click(); await p.waitForTimeout(200) }
+  await rd.getByRole('button', { name: 'Guardar' }).click(); await p.waitForSelector('text=Rota criada')
+  await p.getByRole('tab', { name: /^Equipa/ }).click(); await p.getByRole('button', { name: 'Acrescentar colaborador' }).click(); const ed = p.getByRole('dialog'); await ed.waitFor()
+  await ed.getByLabel('Colaborador').fill('Rita'); await p.waitForTimeout(600); await p.getByRole('option', { name: /Rita Gonçalves/ }).first().click()
+  await ed.getByRole('button', { name: 'Guardar' }).click(); await p.waitForSelector('text=Colaborador acrescentado')
+  await p.getByRole('button', { name: 'Passar a Em curso' }).click(); await p.waitForSelector('text=/Contrato em curso/')
+  await p.waitForTimeout(500); console.log('novo contrato kpis:', (await p.locator('.grid.grid-cols-2').first().innerText()).replace(/\n/g, ' | '))
+  // --- pré-faturação
+  await p.goto(BASE + '/prefaturacao'); await p.getByRole('radio', { name: 'Equipas Fixas' }).click().catch(async () => { await p.getByRole('button', { name: 'Equipas Fixas' }).click() })
+  await p.waitForTimeout(1000)
+  console.log('prefat total:', (await p.locator('tfoot').innerText()).replace(/\s+/g, ' '))
+  await p.screenshot({ path: '/tmp/shots/eqf-prefat.png', fullPage: true })
+  console.log(erros.length ? 'ERROS ' + erros.join('\n') : 'sem erros'); await b.close()
+})()

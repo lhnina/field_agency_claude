@@ -43,9 +43,11 @@ export const semanaISO = (s: string) => {
 export const VINCULO: Record<Vinculo, { label: string; tone: Tone }> = {
   sem_termo: { label: 'Sem termo', tone: 'neu' },
   a_termo: { label: 'A termo', tone: 'info' },
-  muito_curta_duracao: { label: 'Muito curta duração', tone: 'warn' },
   recibos_verdes: { label: 'Recibos verdes', tone: 'neu' },
 }
+/** Vínculo para mostrar numa linha de texto: "A termo · Muito curta duração". */
+export const vinculoTexto = (c: { vinculo: Vinculo; muito_curta_duracao?: boolean }) =>
+  VINCULO[c.vinculo].label + (c.muito_curta_duracao ? ' · Muito curta duração' : '')
 export const AREA: Record<TipoContrato, { label: string; cls: string; sq: string }> = {
   REP: { label: 'Reposição', cls: 'bg-rep-bg text-rep-fg', sq: 'bg-rep' },
   PRO: { label: 'Promoções', cls: 'bg-pro-bg text-pro-fg', sq: 'bg-pro' },
@@ -53,8 +55,8 @@ export const AREA: Record<TipoContrato, { label: string; cls: string; sq: string
   EQF: { label: 'Equipas Fixas', cls: 'bg-eqf-bg text-eqf-fg', sq: 'bg-eqf' },
 }
 export const ESTADO_CONTRATO: Record<string, { label: string; tone: Tone }> = {
-  proposta: { label: 'Proposta', tone: 'info' },
-  ativo: { label: 'Ativo', tone: 'ok' },
+  proposta: { label: 'Em orçamento', tone: 'info' },
+  ativo: { label: 'Em curso', tone: 'ok' },
   suspenso: { label: 'Suspenso', tone: 'neu' },
   terminado: { label: 'Terminado', tone: 'neu' },
 }

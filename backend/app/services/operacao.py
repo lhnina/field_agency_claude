@@ -9,6 +9,7 @@ from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session, joinedload
 
 from app.config import settings
+from app.services.periodos import verificar_editavel
 from app.models import (
     Afetacao, Auditoria, Ausencia, Colaborador, Contrato, EstadoContrato, EstadoOcorrencia, Feriado, LinhaContrato,
     Loja, Ocorrencia, Perfil, TipoVinculo, User,
@@ -67,11 +68,9 @@ def afetacao_em(linha: LinhaContrato, d: date) -> Afetacao | None:
     return None
 
 
-def feriados_entre(db: Session, tenant_id: int, ini: date, fim: date) -> set[date]:
-    rows = db.scalars(select(Feriado.data).where(
-        Feriado.data.between(ini, fim), or_(Feriado.tenant_id.is_(None), Feriado.tenant_id == tenant_id)
-    )).all()
-    return set(rows)
+def feriados_entre(db: Session, tenant_id: int, ini: date, fim: date, zona_id: int | None = None) -> set[date]:
+    from app.services.feriados import feriados_entre as _f  # import local: evita ciclo
+    return _f(db, tenant_id, ini, fim, zona_id)
 
 
 def _dia_reagendado(linha: LinhaContrato, d: date, feriados: set[date], fim: date) -> date | None:
@@ -104,7 +103,7 @@ def gerar_ocorrencias(db: Session, linha: LinhaContrato, ate: date, desde: date 
     fim = min(x for x in (ate, linha.fim, c.fim) if x is not None)
     if fim < ini:
         return 0
-    feriados = feriados_entre(db, linha.tenant_id, ini, fim + timedelta(days=7))
+    feriados = feriados_entre(db, linha.tenant_id, ini, fim + timedelta(days=7), linha.loja.zona_id if linha.loja else None)
     existentes = set(db.scalars(select(Ocorrencia.data_original).where(
         Ocorrencia.linha_id == linha.id, Ocorrencia.data_original.between(ini, fim))).all())
     criadas = 0
@@ -144,6 +143,11 @@ def afetar(db: Session, user: User, linha: LinhaContrato, colaborador: Colaborad
     (por defeito até ao fim). Fecha a afetação anterior e atualiza as ocorrências."""
     if ate is not None and ate < desde:
         raise ValueError("A data de fim é anterior à data de início")
+    if colaborador.data_saida is not None:
+        if desde > colaborador.data_saida:
+            raise ValueError(f"{colaborador.nome} sai a {_dm(colaborador.data_saida)}: não pode ser afeto depois dessa data")
+        if ate is None or ate > colaborador.data_saida:
+            ate = colaborador.data_saida  # a afetação termina na data de saída
     for a in list(linha.afetacoes):
         if a.desde >= desde and (ate is None or a.desde <= ate):
             linha.afetacoes.remove(a)
@@ -181,6 +185,81 @@ def afetar(db: Session, user: User, linha: LinhaContrato, colaborador: Colaborad
     return nova
 
 
+# ------------------------------------------------------------------ saída do colaborador
+def saiu(c: Colaborador, d: date) -> bool:
+    """Depois da data de saída o colaborador já não trabalha (o próprio dia ainda conta)."""
+    return c.data_saida is not None and d > c.data_saida
+
+
+def _dm(d: date) -> str:
+    return d.strftime("%d/%m/%Y")
+
+
+def aplicar_saida(db: Session, user: User | None, c: Colaborador) -> dict:
+    """Com data de saída: termina as afetações nessa data, retira-o das substituições e dos
+    serviços de logística por executar depois dela e, passada a data, desativa-o.
+    Nada é apagado: as ocorrências ficam por atribuir no planeamento."""
+    from app.models import EstadoServicoLog, ServicoLogistico  # import local: evita ciclo
+    res = {"afetacoes": 0, "servicos": 0, "desativado": False}
+    if c.data_saida is None:
+        return res
+    depois = c.data_saida + timedelta(days=1)
+    linhas = db.scalars(select(LinhaContrato).join(Afetacao).where(
+        Afetacao.colaborador_id == c.id, or_(Afetacao.ate.is_(None), Afetacao.ate > c.data_saida))).unique().all()
+    for ln in linhas:
+        for a in list(ln.afetacoes):
+            if a.colaborador_id != c.id:
+                continue
+            if a.desde > c.data_saida:
+                ln.afetacoes.remove(a)
+                db.delete(a)
+                res["afetacoes"] += 1
+            elif a.ate is None or a.ate > c.data_saida:
+                a.ate = c.data_saida
+                res["afetacoes"] += 1
+        db.flush()
+        for o in db.scalars(select(Ocorrencia).where(
+                Ocorrencia.linha_id == ln.id, Ocorrencia.data >= depois, Ocorrencia.estado.in_(EDITAVEIS),
+                Ocorrencia.colaborador_previsto_id == c.id)).all():
+            o.colaborador_previsto_id = None
+            o.estado = EstadoOcorrencia.planeado if o.colaborador_efetivo_id is None else o.estado
+            res["servicos"] += 1
+    for o in db.scalars(select(Ocorrencia).where(
+            Ocorrencia.colaborador_efetivo_id == c.id, Ocorrencia.data >= depois, Ocorrencia.estado.in_(EDITAVEIS))).all():
+        o.colaborador_efetivo_id = None
+        o.motivo_alteracao = None
+        o.estado = EstadoOcorrencia.atribuido if o.colaborador_previsto_id else EstadoOcorrencia.planeado
+        res["servicos"] += 1
+    pend = (EstadoServicoLog.planeado, EstadoServicoLog.atribuido)
+    for s in db.scalars(select(ServicoLogistico).where(
+            ServicoLogistico.data >= depois, ServicoLogistico.estado.in_(pend),
+            or_(ServicoLogistico.colaborador_id == c.id, ServicoLogistico.ajudante_id == c.id))).all():
+        if s.colaborador_id == c.id:
+            s.colaborador_id = None
+            s.estado = EstadoServicoLog.planeado
+        if s.ajudante_id == c.id:
+            s.ajudante_id = None
+        res["servicos"] += 1
+    from app.services import equipas as eq  # import local: evita ciclo
+    res["servicos"] += eq.sair(db, user, c)
+    if c.ativo and c.data_saida < date.today():
+        c.ativo = False
+        res["desativado"] = True
+    if res["afetacoes"] or res["servicos"] or res["desativado"]:
+        auditar(db, user, "colaborador", c.id, "saida", {"data_saida": c.data_saida, **res}, tenant_id=c.tenant_id)
+    db.flush()
+    return res
+
+
+def aplicar_saidas(db: Session, tenant_id: int) -> None:
+    """Desativa quem já saiu (corre ao abrir colaboradores e planeamento)."""
+    db.flush()
+    for c in db.scalars(select(Colaborador).where(
+            Colaborador.tenant_id == tenant_id, Colaborador.ativo.is_(True),
+            Colaborador.data_saida.is_not(None), Colaborador.data_saida < date.today())).all():
+        aplicar_saida(db, None, c)
+
+
 def remover_afetacao(db: Session, user: User, linha: LinhaContrato, desde: date) -> None:
     """Termina a afetação em vigor a partir de `desde`: as ocorrências ficam por atribuir."""
     for a in list(linha.afetacoes):
@@ -201,7 +280,12 @@ def substituir(db: Session, user: User, o: Ocorrencia, colaborador_id: int | Non
     """Altera só esta ocorrência; a afetação de base mantém-se."""
     if o.estado not in EDITAVEIS:
         raise ValueError("Esta ocorrência já foi executada ou validada e não pode ser alterada")
+    verificar_editavel(db, o)
     antes = o.colaborador_id
+    if colaborador_id:
+        novo = db.get(Colaborador, colaborador_id)
+        if novo and saiu(novo, o.data):
+            raise ValueError(f"{novo.nome} sai a {_dm(novo.data_saida)}: não pode fazer serviços depois dessa data")
     if colaborador_id is None or colaborador_id == o.colaborador_previsto_id:
         o.colaborador_efetivo_id = None
         o.motivo_alteracao = None
@@ -217,6 +301,7 @@ def substituir(db: Session, user: User, o: Ocorrencia, colaborador_id: int | Non
 def mover(db: Session, user: User, o: Ocorrencia, nova_data: date) -> Ocorrencia:
     if o.estado not in EDITAVEIS:
         raise ValueError("Esta ocorrência já foi executada ou validada e não pode ser alterada")
+    verificar_editavel(db, o, nova_data)
     if not linha_ativa(o.linha, nova_data):
         raise ValueError("A nova data está fora da vigência da linha de contrato")
     antes = o.data
@@ -227,8 +312,9 @@ def mover(db: Session, user: User, o: Ocorrencia, nova_data: date) -> Ocorrencia
 
 
 def ocorrencias_afetadas(db: Session, aus: Ausencia) -> list[Ocorrencia]:
-    return db.scalars(select(Ocorrencia).options(joinedload(Ocorrencia.linha).joinedload(LinhaContrato.loja)).where(
-        Ocorrencia.tenant_id == aus.tenant_id,
+    return db.scalars(select(Ocorrencia).options(joinedload(Ocorrencia.linha).joinedload(LinhaContrato.loja))
+                      .join(LinhaContrato, Ocorrencia.linha_id == LinhaContrato.id).join(Contrato, LinhaContrato.contrato_id == Contrato.id).where(
+        Ocorrencia.tenant_id == aus.tenant_id, Contrato.estado == EstadoContrato.ativo,
         Ocorrencia.data.between(aus.inicio, aus.fim),
         Ocorrencia.estado.in_(EDITAVEIS),
         or_(Ocorrencia.colaborador_efetivo_id == aus.colaborador_id,
@@ -239,15 +325,38 @@ def ocorrencias_afetadas(db: Session, aus: Ausencia) -> list[Ocorrencia]:
 # ------------------------------------------------------------------ carga e candidatos
 def _horas_por_colaborador(db: Session, tenant_id: int, ini: date, fim: date) -> dict[tuple[int, date], Decimal]:
     rows = db.execute(select(Ocorrencia.colaborador_efetivo_id, Ocorrencia.colaborador_previsto_id, Ocorrencia.data,
-                             Ocorrencia.horas_planeadas).where(
-        Ocorrencia.tenant_id == tenant_id, Ocorrencia.data.between(ini, fim),
-        Ocorrencia.estado != EstadoOcorrencia.cancelado)).all()
+                             Ocorrencia.horas_planeadas)
+        .join(LinhaContrato, Ocorrencia.linha_id == LinhaContrato.id).join(Contrato, LinhaContrato.contrato_id == Contrato.id)
+        .where(Ocorrencia.tenant_id == tenant_id, Ocorrencia.data.between(ini, fim),
+               Ocorrencia.estado != EstadoOcorrencia.cancelado, Contrato.estado == EstadoContrato.ativo)).all()
     out: dict[tuple[int, date], Decimal] = {}
     for ef, pr, d, h in rows:
         cid = ef or pr
         if cid:
             out[(cid, d)] = out.get((cid, d), Decimal("0")) + h
+    for k, h in _horas_equipas(db, tenant_id, ini, fim).items():
+        out[k] = out.get(k, Decimal("0")) + h
     return out
+
+
+def _horas_equipas(db: Session, tenant_id: int, ini: date, fim: date, ids: set[int] | None = None) -> dict[tuple[int, date], Decimal]:
+    """Horas dos dias de Equipas Fixas (contratos em curso, não faltas nem cancelados)."""
+    from app.models import EstadoServicoEquipa, ServicoEquipa  # import local: evita ciclo
+    q = (select(ServicoEquipa.colaborador_id, ServicoEquipa.data, ServicoEquipa.horas_planeadas, ServicoEquipa.horas_reais)
+         .join(Contrato, ServicoEquipa.contrato_id == Contrato.id)
+         .where(ServicoEquipa.tenant_id == tenant_id, ServicoEquipa.data.between(ini, fim), Contrato.estado == EstadoContrato.ativo,
+                ServicoEquipa.estado.in_((EstadoServicoEquipa.planeado, EstadoServicoEquipa.validado))))
+    if ids is not None:
+        q = q.where(ServicoEquipa.colaborador_id.in_(ids))
+    out: dict[tuple[int, date], Decimal] = {}
+    for cid, d, hp, hr in db.execute(q).all():
+        out[(cid, d)] = out.get((cid, d), Decimal("0")) + (hr if hr is not None else hp)
+    return out
+
+
+def horas_colaborador_dia(db: Session, tenant_id: int, ini: date, fim: date) -> dict[tuple[int, date], Decimal]:
+    """Horas por colaborador e dia em todos os serviços (reposição, promoções e equipas fixas)."""
+    return _horas_por_colaborador(db, tenant_id, ini, fim)
 
 
 def _ausentes(db: Session, tenant_id: int, ini: date, fim: date) -> dict[int, list[Ausencia]]:
@@ -264,9 +373,11 @@ def candidatos(db: Session, o: Ocorrencia, limite: int = 8) -> list[dict]:
     seg = o.data - timedelta(days=o.data.weekday())
     horas = _horas_por_colaborador(db, o.tenant_id, seg, seg + timedelta(days=6))
     ausentes = _ausentes(db, o.tenant_id, o.data, o.data)
+    from app.services import documentos as dc  # import local: evita ciclo
+    ctx_doc = dc.contexto(db, o.tenant_id)
     res = []
     for c in db.scalars(select(Colaborador).where(Colaborador.tenant_id == o.tenant_id, Colaborador.ativo.is_(True))).all():
-        if c.id == o.colaborador_id:
+        if c.id == o.colaborador_id or saiu(c, o.data):
             continue
         motivos, pontos, bloqueios = [], 0, []
         if c.id in ausentes:
@@ -286,8 +397,10 @@ def candidatos(db: Session, o: Ocorrencia, limite: int = 8) -> list[dict]:
                 bloqueios.append(f"Excederia {settings.limite_horas_dia:g} h no dia ({dia + o.horas_planeadas} h)")
             if semana + o.horas_planeadas > Decimal(str(settings.limite_horas_semana)):
                 bloqueios.append(f"Excederia {settings.limite_horas_semana:g} h na semana")
+        for falta in ctx_doc.falhas(c, o.linha.contrato.cliente_id, loja.insignia_id, o.data):
+            bloqueios.append(f"Documentação: {falta}")
         pontos += 1 if semana < 20 else 0
-        res.append({"colaborador_id": c.id, "nome": c.nome, "vinculo": c.vinculo.value, "horas_dia": float(dia),
+        res.append({"colaborador_id": c.id, "nome": c.nome, "vinculo": c.vinculo.value, "muito_curta_duracao": c.muito_curta_duracao, "horas_dia": float(dia),
                     "horas_semana": float(semana), "pontos": pontos - 10 * len(bloqueios), "motivos": motivos,
                     "alertas": bloqueios})
     res.sort(key=lambda r: (-r["pontos"], r["horas_semana"]))
@@ -313,36 +426,61 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
          .options(joinedload(Ocorrencia.linha).joinedload(LinhaContrato.loja),
                   joinedload(Ocorrencia.linha).joinedload(LinhaContrato.contrato).joinedload(Contrato.cliente))
          .where(Ocorrencia.tenant_id == user.tenant_id, Ocorrencia.data.between(segunda, dom),
-                Ocorrencia.estado != EstadoOcorrencia.cancelado))
-    if f.zona_id:
+                Ocorrencia.estado != EstadoOcorrencia.cancelado,
+                # Só contratos "Em curso": em orçamento, suspensos e terminados não aparecem.
+                Contrato.estado == EstadoContrato.ativo))
+    # Todos os filtros combinam-se (E). Na vista de um colaborador, a zona só filtra
+    # os serviços por atribuir: os serviços dele aparecem em qualquer zona.
+    alvo = set(f.colaborador_ids)
+    if f.zona_id and not alvo:
         q = q.where(Loja.zona_id == f.zona_id)
     if f.cliente_id:
         q = q.where(Contrato.cliente_id == f.cliente_id)
     if f.tipo:
         q = q.where(Contrato.tipo == f.tipo)
+    from app.ambito import clientes_permitidos
+    permitidos = clientes_permitidos(db, user)
+    if permitidos is not None:
+        q = q.where(Contrato.cliente_id.in_(permitidos))
     ocorrencias = db.scalars(q.order_by(Ocorrencia.data, Ocorrencia.hora_inicio)).unique().all()
 
-    sup = user.id if user.perfil == Perfil.supervisor else f.supervisor_id
-    colabs_q = select(Colaborador).where(Colaborador.tenant_id == user.tenant_id, Colaborador.ativo.is_(True))
-    if sup:
-        colabs_q = colabs_q.where(Colaborador.supervisor_id == sup)
-    equipa = {c.id: c for c in db.scalars(colabs_q).all()} if sup else None
+    # Âmbito do supervisor (o próprio, ou o escolhido no filtro): a zona que supervisiona.
+    from app.ambito import equipa as equipa_de
+    sup_user = user if user.perfil == Perfil.supervisor else (db.get(User, f.supervisor_id) if f.supervisor_id else None)
+    zona_sup = sup_user.zona_id if sup_user is not None else None
+    sup = zona_sup is not None
+    equipa: set[int] | None = equipa_de(db, sup_user)
 
-    if equipa is not None:
-        ocorrencias = [o for o in ocorrencias if (o.colaborador_id in equipa)
-                       or (o.colaborador_id is None and o.linha.loja.supervisor_id == sup)]
+    def visivel(o: Ocorrencia) -> bool:
+        cid = o.colaborador_id
+        if cid is None:  # por atribuir: lojas do supervisor e, na vista de colaborador, da zona escolhida
+            if sup and o.linha.loja.zona_id != zona_sup:
+                return False
+            return not (alvo and f.zona_id and o.linha.loja.zona_id != f.zona_id)
+        if equipa is not None and cid not in equipa:
+            return False
+        return not alvo or cid in alvo
 
+    ocorrencias = [o for o in ocorrencias if visivel(o)]
     ids = {o.colaborador_id for o in ocorrencias if o.colaborador_id}
-    if equipa is not None:
-        ids |= set(equipa)
+    if alvo:  # o colaborador aparece mesmo sem serviços nesta semana
+        ids |= alvo if equipa is None else (alvo & equipa)
+    elif equipa is not None and not (f.cliente_id or f.zona_id or f.tipo):
+        ids |= equipa  # só o supervisor filtrado: mostra a equipa toda, para poder afetar
     colabs = {c.id: c for c in db.scalars(select(Colaborador).where(Colaborador.id.in_(ids))).all()} if ids else {}
     ausencias = _ausentes(db, user.tenant_id, segunda, dom)
+    from app.services import documentos as dc  # import local: evita ciclo
+    ctx_doc = dc.contexto(db, user.tenant_id, list(colabs))
+    falhas_doc: dict[int, set[str]] = {}
 
     horas: dict[tuple[int, date], Decimal] = {}
     for o in ocorrencias:
         if o.colaborador_id:
             k = (o.colaborador_id, o.data)
             horas[k] = horas.get(k, Decimal("0")) + o.horas_planeadas
+    if colabs:  # os dias de Equipas Fixas contam para os limites de horas
+        for k, h in _horas_equipas(db, user.tenant_id, segunda, dom, set(colabs)).items():
+            horas[k] = horas.get(k, Decimal("0")) + h
 
     def aus_em(cid: int, d: date) -> Ausencia | None:
         return next((a for a in ausencias.get(cid, []) if a.inicio <= d <= a.fim), None)
@@ -359,6 +497,10 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
             if c and c.vinculo != TipoVinculo.recibos_verdes and horas.get((cid, o.data), 0) > Decimal(str(settings.limite_horas_dia)):
                 alertas.append("excede_horas_dia")
         ln = o.linha
+        docs = ctx_doc.falhas(colabs[cid], ln.contrato.cliente_id, ln.loja.insignia_id, o.data) if cid in colabs else []
+        if docs:  # só aviso: não impede a afetação
+            alertas.append("documentacao")
+            falhas_doc.setdefault(cid, set()).update(docs)
         return {
             "id": o.id, "data": o.data.isoformat(), "data_original": o.data_original.isoformat(),
             "reagendada_feriado": o.reagendada_feriado, "hora_inicio": o.hora_inicio,
@@ -367,9 +509,10 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
             "substituicao": o.colaborador_efetivo_id is not None, "motivo": o.motivo_alteracao,
             "linha_id": ln.id, "contrato_id": ln.contrato_id, "contrato_numero": ln.contrato.numero,
             "tipo": ln.contrato.tipo.value, "cliente": ln.contrato.cliente.nome, "loja": ln.loja.nome,
-            "loja_id": ln.loja_id, "mecanica": ln.mecanica, "alertas": alertas,
+            "loja_id": ln.loja_id, "mecanica": ln.mecanica, "alertas": alertas, "documentacao": docs,
         }
 
+    oc = [oc_json(o) for o in ocorrencias]
     linhas_colab = []
     for cid, c in sorted(colabs.items(), key=lambda kv: kv[1].nome):
         tot = sum((v for (k, _), v in horas.items() if k == cid), Decimal("0"))
@@ -383,14 +526,18 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
             dias_trab = sorted({d for (k, d), _ in horas.items() if k == cid})
             if len(dias_trab) >= 7:
                 alertas.append("Sem dia de descanso semanal")
+            if c.muito_curta_duracao:
+                from app.services.fecho import indicadores_colaborador  # import local: evita ciclo
+                alertas += [a["texto"] for a in indicadores_colaborador(db, c, date.today())["alertas"]]
+        if falhas_doc.get(cid):
+            alertas.append("Documentação: " + ", ".join(sorted(falhas_doc[cid])))
         aus = [{"tipo": a.tipo.value, "inicio": a.inicio.isoformat(), "fim": a.fim.isoformat()} for a in ausencias.get(cid, [])]
         linhas_colab.append({
-            "id": cid, "nome": c.nome, "numero": c.numero, "vinculo": c.vinculo.value, "funcao": c.funcao,
+            "id": cid, "nome": c.nome, "numero": c.numero, "vinculo": c.vinculo.value, "muito_curta_duracao": c.muito_curta_duracao, "funcao": c.funcao,
             "horas_semana": float(tot), "limite_semana": None if c.vinculo == TipoVinculo.recibos_verdes else settings.limite_horas_semana,
             "alertas": alertas, "ausencias": aus, "disponibilidade": c.disponibilidade,
         })
 
-    oc = [oc_json(o) for o in ocorrencias]
     return {
         "inicio": segunda.isoformat(), "fim": dom.isoformat(),
         "dias": [(segunda + timedelta(days=i)).isoformat() for i in range(7)],
@@ -402,6 +549,7 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
             "por_atribuir": sum(1 for o in oc if o["colaborador_id"] is None),
             "conflitos": sum(1 for o in oc if {"colaborador_ausente", "excede_horas_dia"} & set(o["alertas"])),
             "ausencias": sum(len(v) for k, v in ausencias.items() if k in colabs),
+            "documentacao": sum(1 for o in oc if "documentacao" in o["alertas"]),
             "horas": float(sum((o.horas_planeadas for o in ocorrencias), Decimal("0"))),
         },
     }

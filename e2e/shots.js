@@ -26,7 +26,7 @@ const out = process.argv[2] || '/tmp/shots'
   await p.goto('http://localhost:5173/contratos')
   await p.waitForSelector('table')
   await p.screenshot({ path: `${out}/3-contratos.png`, fullPage: true })
-  await p.click('table tbody tr >> nth=0')
+  await p.locator('table tbody tr', { hasText: 'Reposição' }).first().click()
   await p.waitForSelector('text=Linhas por loja')
   await p.screenshot({ path: `${out}/4-contrato.png`, fullPage: true })
 

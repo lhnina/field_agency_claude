@@ -1,7 +1,7 @@
 const TOKEN_KEY = 'fa.token'
 const USER_KEY = 'fa.user'
 
-export type SessionUser = { id: number; nome: string; email: string; perfil: string }
+export type SessionUser = { id: number; nome: string; email: string; perfil: string; zona?: string | null }
 
 export const session = {
   token: () => { try { return localStorage.getItem(TOKEN_KEY) } catch { return null } },
@@ -52,4 +52,47 @@ export async function login(email: string, password: string) {
   if (!r.ok) throw new ApiError(r.status, mensagem(body, r.status))
   session.set(body.access_token, body.user)
   return body.user as SessionUser
+}
+
+/** Envio de formulário com ficheiro (multipart). */
+export async function apiForm<T>(path: string, method: 'POST' | 'PUT', dados: Record<string, string | Blob | null | undefined>): Promise<T> {
+  const fd = new FormData()
+  Object.entries(dados).forEach(([k, v]) => { if (v !== undefined && v !== null && v !== '') fd.append(k, v) })
+  const headers: Record<string, string> = {}
+  const t = session.token()
+  if (t) headers.Authorization = `Bearer ${t}`
+  const r = await fetch('/api' + path, { method, headers, body: fd })
+  const body = await r.json().catch(() => null)
+  if (!r.ok) throw new ApiError(r.status, mensagem(body, r.status))
+  return body as T
+}
+
+/** Abre um ficheiro protegido (com sessão) num novo separador. */
+export async function abrirFicheiro(path: string) {
+  const janela = window.open('', '_blank')
+  const headers: Record<string, string> = {}
+  const t = session.token()
+  if (t) headers.Authorization = `Bearer ${t}`
+  const r = await fetch('/api' + path, { headers })
+  if (!r.ok) { janela?.close(); throw new ApiError(r.status, mensagem(await r.json().catch(() => null), r.status)) }
+  const url = URL.createObjectURL(await r.blob())
+  if (janela) janela.location.href = url
+  else window.location.assign(url)
+  setTimeout(() => URL.revokeObjectURL(url), 60_000)
+}
+
+/** Descarrega um ficheiro protegido com o nome dado pelo servidor. */
+export async function descarregar(path: string, nome = 'ficheiro') {
+  const headers: Record<string, string> = {}
+  const t = session.token()
+  if (t) headers.Authorization = `Bearer ${t}`
+  const r = await fetch('/api' + path, { headers })
+  if (!r.ok) throw new ApiError(r.status, mensagem(await r.json().catch(() => null), r.status))
+  const cd = r.headers.get('Content-Disposition') ?? ''
+  const m = cd.match(/filename\*=UTF-8''([^;]+)/i) ?? cd.match(/filename="?([^";]+)"?/i)
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(await r.blob())
+  a.download = m ? decodeURIComponent(m[1]) : nome
+  document.body.appendChild(a); a.click(); a.remove()
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000)
 }

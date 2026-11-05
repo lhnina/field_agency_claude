@@ -21,6 +21,7 @@ class UserOut(ORM):
     nome: str
     email: str
     perfil: str
+    zona: str | None = None  # supervisor: zona supervisionada (None = todas)
 
 
 # ---------------------------------------------------------------- dados mestre
@@ -33,15 +34,42 @@ class IdNome(ORM):
     nome: str
 
 
+class IdNomeAtivo(ORM):
+    id: int
+    nome: str
+    ativo: bool
+    logo_v: int | None = None  # só insígnias: versão do logótipo (None = sem logótipo)
+
+
+class InsigniaRef(ORM):
+    id: int
+    nome: str
+    logo_v: int | None = None
+
+
 class MarcaOut(ORM):
     id: int
     nome: str
+    ativo: bool = True
+
+
+class EstadoAtivoIn(BaseModel):
+    ativo: bool
 
 
 class ClienteIn(BaseModel):
     nome: str = Field(min_length=1, max_length=160)
     nif: str | None = None
-    codigo_phc: int | None = None
+    codigo_erp: int | None = None
+    morada: str | None = None
+    codigo_postal: str | None = None
+    localidade: str | None = None
+    telefone: str | None = None
+    email: str | None = None
+    url: str | None = None
+    contacto_nome: str | None = None
+    gestor_conta_id: int | None = None
+    observacoes: str | None = None
     marcas: list[str] = []
 
 
@@ -49,12 +77,24 @@ class ClienteOut(ORM):
     id: int
     nome: str
     nif: str | None
-    codigo_phc: int | None
+    codigo_erp: int | None
+    morada: str | None
+    codigo_postal: str | None
+    localidade: str | None
+    telefone: str | None
+    email: str | None
+    url: str | None
+    contacto_nome: str | None
+    gestor_conta_id: int | None
+    gestor_conta: IdNome | None = None
+    observacoes: str | None
+    ativo: bool
     marcas: list[MarcaOut]
 
 
 class LojaIn(BaseModel):
     nome: str = Field(min_length=1, max_length=160)
+    codigo_erp: str | None = Field(default=None, max_length=30)
     insignia_id: int | None = None
     zona_id: int | None = None
     supervisor_id: int | None = None
@@ -74,7 +114,8 @@ class LojaIn(BaseModel):
 
 class LojaOut(LojaIn, ORM):
     id: int
-    insignia: IdNome | None = None
+    ativo: bool
+    insignia: InsigniaRef | None = None
     zona: IdNome | None = None
 
 
@@ -86,13 +127,20 @@ class ColaboradorIn(BaseModel):
     email: str | None = None
     telefone: str | None = None
     vinculo: TipoVinculo
-    data_inicio: date | None = None
-    data_fim_vinculo: date | None = None
+    muito_curta_duracao: bool = False
+    data_admissao: date | None = None
+    data_saida: date | None = None
+    data_inicio: date | None = None  # início do contrato
+    data_fim_vinculo: date | None = None  # fim do contrato
     zona_id: int | None = None
     supervisor_id: int | None = None
     custo_hora: Decimal = Decimal("0")
     disponibilidade: str = "1111100"
     ativo: bool = True
+    # identificação, usada nas credenciais
+    data_nascimento: date | None = None
+    numero_identificacao: str | None = Field(default=None, max_length=30)
+    niss: str | None = Field(default=None, max_length=20)
 
     @field_validator("disponibilidade")
     @classmethod
@@ -101,10 +149,28 @@ class ColaboradorIn(BaseModel):
             raise ValueError("A disponibilidade tem 7 dígitos 0/1 (segunda a domingo)")
         return v
 
+    @model_validator(mode="after")
+    def _laboral(self):
+        # Recibos verdes: sem datas laborais nem tipo de contrato de trabalho.
+        if self.vinculo == TipoVinculo.recibos_verdes:
+            self.muito_curta_duracao = False
+            self.data_admissao = self.data_saida = self.data_inicio = self.data_fim_vinculo = None
+        return self
+
+    def validar_datas(self) -> None:
+        if self.data_admissao and self.data_saida and self.data_saida < self.data_admissao:
+            raise ValueError("A data de saída é anterior à data de admissão")
+        if self.data_inicio and self.data_fim_vinculo and self.data_fim_vinculo < self.data_inicio:
+            raise ValueError("O fim do contrato é anterior ao início do contrato")
+        if self.muito_curta_duracao and self.vinculo == TipoVinculo.sem_termo:
+            raise ValueError("Um contrato de muito curta duração não pode ser sem termo")
+
 
 class ColaboradorOut(ColaboradorIn, ORM):
     id: int
     zona: IdNome | None = None
+    horas_afetadas: Decimal = Decimal("0")  # soma das horas/semana das lojas em que está afeto hoje
+    aviso: str | None = None  # resultado de aplicar a data de saída
 
 
 # ---------------------------------------------------------------- contratos
@@ -151,6 +217,8 @@ class LinhaOut(ORM):
     loja_id: int
     loja_nome: str
     loja_insignia: str | None
+    loja_insignia_id: int | None = None
+    loja_insignia_logo_v: int | None = None
     loja_zona: str | None
     inicio: date
     fim: date | None
@@ -184,6 +252,9 @@ class ContratoIn(BaseModel):
     descricao: str | None = None
     evento: str | None = None
     observacoes: str | None = None
+    # Equipas Fixas
+    valor_gestao: Decimal | None = Field(default=None, ge=0)
+    acrescimo_despesas_pct: Decimal = Field(default=Decimal("0"), ge=0, le=100)
 
     @model_validator(mode="after")
     def _datas(self):
@@ -216,6 +287,8 @@ class ContratoResumo(ORM):
 class ContratoOut(ContratoResumo):
     marca_id: int | None
     observacoes: str | None
+    valor_gestao: Decimal | None = None
+    acrescimo_despesas_pct: Decimal = Decimal("0")
     linhas: list[LinhaOut]
 
 

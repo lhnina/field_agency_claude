@@ -9,13 +9,16 @@ from app.api.base import obter
 from app.config import settings
 from app.db import get_db
 from app.models import (
-    Afetacao, Cliente, Colaborador, Contrato, EstadoContrato, LinhaContrato, Loja, Marca, Perfil, User,
+    Afetacao, Cliente, Colaborador, Contrato, EstadoContrato, EstadoServicoLog, LinhaContrato, Loja, Marca, Perfil,
+    RotaEquipa, RotaLoja, ServicoLogistico, TipoContrato, User,
 )
 from app.schemas import (
     AfetacaoOut, AfetarIn, ContratoIn, ContratoOut, ContratoResumo, EstadoIn, GerarIn, LinhaIn, LinhaOut,
 )
 from app.security import requer
+from app.services import equipas as eq
 from app.services import operacao as op
+from app import ambito
 
 router = APIRouter(tags=["contratos"])
 
@@ -29,6 +32,7 @@ def _linha_out(ln: LinhaContrato, hoje: date) -> LinhaOut:
     return LinhaOut(
         id=ln.id, loja_id=ln.loja_id, loja_nome=ln.loja.nome,
         loja_insignia=ln.loja.insignia.nome if ln.loja.insignia else None,
+        loja_insignia_id=ln.loja.insignia_id, loja_insignia_logo_v=ln.loja.insignia.logo_v if ln.loja.insignia else None,
         loja_zona=ln.loja.zona.nome if ln.loja.zona else None,
         inicio=ln.inicio, fim=ln.fim, h_seg=ln.h_seg, h_ter=ln.h_ter, h_qua=ln.h_qua, h_qui=ln.h_qui, h_sex=ln.h_sex,
         h_sab=ln.h_sab, h_dom=ln.h_dom, hora_inicio=ln.hora_inicio, preco_hora=ln.preco_hora,
@@ -43,7 +47,26 @@ def _ativas(c: Contrato, hoje: date) -> list[LinhaContrato]:
     return [ln for ln in c.linhas if ln.fim is None or ln.fim >= hoje]
 
 
-def _resumo(c: Contrato, hoje: date) -> dict:
+def _resumo(c: Contrato, hoje: date, servicos: list | None = None, equipa: dict | None = None) -> dict:
+    if c.tipo == TipoContrato.EQF:
+        # Equipas Fixas: "linhas" = elementos; valor = custo previsto + valor de gestão
+        e = equipa or {"n": 0, "horas_semana": Decimal("0"), "previsto": Decimal("0"), "sem_escala": 0}
+        return dict(
+            id=c.id, numero=c.numero, tipo=c.tipo, estado=c.estado, cliente_id=c.cliente_id, cliente_nome=c.cliente.nome,
+            marca_nome=c.marca.nome if c.marca else None, descricao=c.descricao, evento=c.evento, data=c.data,
+            inicio=c.inicio, fim=c.fim, versao=c.versao, n_linhas=e["n"], horas_semana=e["horas_semana"],
+            horas_mes=op.q2(e["horas_semana"] * op.SEMANAS_POR_MES), valor_mensal=e["previsto"], linhas_por_atribuir=e["sem_escala"],
+        )
+    if c.tipo == TipoContrato.LOG:
+        # Logística: valor = soma dos serviços (não cancelados); "linhas" = serviços
+        vivos = [s for s in (servicos or []) if s.estado != EstadoServicoLog.cancelado]
+        return dict(
+            id=c.id, numero=c.numero, tipo=c.tipo, estado=c.estado, cliente_id=c.cliente_id, cliente_nome=c.cliente.nome,
+            marca_nome=c.marca.nome if c.marca else None, descricao=c.descricao, evento=c.evento, data=c.data,
+            inicio=c.inicio, fim=c.fim, versao=c.versao, n_linhas=len(vivos), horas_semana=Decimal("0"), horas_mes=Decimal("0"),
+            valor_mensal=sum((s.preco for s in vivos), Decimal("0")),
+            linhas_por_atribuir=sum(1 for s in vivos if s.estado == EstadoServicoLog.planeado),
+        )
     ativas = _ativas(c, hoje)
     hs = sum((ln.horas_semana for ln in ativas), Decimal("0"))
     return dict(
@@ -64,13 +87,41 @@ def _carregar(db: Session, cid: int, user: User) -> Contrato:
     ).where(Contrato.id == cid, Contrato.tenant_id == user.tenant_id))
     if not c:
         raise HTTPException(404, "Contrato não encontrado")
+    ambito.verificar(db, user, c)
     return c
+
+
+def _servicos(db: Session, ids: list[int]) -> dict[int, list[ServicoLogistico]]:
+    out: dict[int, list[ServicoLogistico]] = {i: [] for i in ids}
+    if ids:
+        for s in db.scalars(select(ServicoLogistico).where(ServicoLogistico.contrato_id.in_(ids))).all():
+            out[s.contrato_id].append(s)
+    return out
 
 
 def _out(c: Contrato) -> ContratoOut:
     hoje = date.today()
-    return ContratoOut(**_resumo(c, hoje), marca_id=c.marca_id, observacoes=c.observacoes,
+    from sqlalchemy.orm import object_session
+    ses = object_session(c)
+    serv = _servicos(ses, [c.id]).get(c.id) if c.tipo == TipoContrato.LOG else None
+    equipa = eq.resumo_contrato(ses, c, hoje) if c.tipo == TipoContrato.EQF else None
+    return ContratoOut(**_resumo(c, hoje, serv, equipa), marca_id=c.marca_id, observacoes=c.observacoes,
+                       valor_gestao=c.valor_gestao, acrescimo_despesas_pct=c.acrescimo_despesas_pct or Decimal("0"),
                        linhas=[_linha_out(ln, hoje) for ln in c.linhas])
+
+
+def _fmt(d: date) -> str:
+    return d.strftime("%d/%m/%Y")
+
+
+def _validar_vigencia_linha(c: Contrato, inicio: date, fim: date | None) -> None:
+    """As linhas têm de ficar dentro da vigência do contrato."""
+    if inicio < c.inicio:
+        raise HTTPException(422, f"O início da loja não pode ser antes do início do contrato ({_fmt(c.inicio)})")
+    if c.fim and inicio > c.fim:
+        raise HTTPException(422, f"O início da loja não pode ser depois do fim do contrato ({_fmt(c.fim)})")
+    if fim and c.fim and fim > c.fim:
+        raise HTTPException(422, f"O fim da loja não pode ser depois do fim do contrato ({_fmt(c.fim)})")
 
 
 def _horizonte() -> date:
@@ -88,8 +139,20 @@ def listar(tipo: str | None = None, estado: str | None = None, cliente_id: int |
         s = s.where(Contrato.estado == estado)
     if cliente_id:
         s = s.where(Contrato.cliente_id == cliente_id)
+    permitidos = ambito.clientes_permitidos(db, user)
+    if permitidos is not None:
+        s = s.where(Contrato.cliente_id.in_(permitidos))
+    zona = ambito.zona_supervisor(user)
+    if zona is not None:  # contratos com lojas na zona do supervisor
+        s = s.where(Contrato.id.in_(select(LinhaContrato.contrato_id).join(Loja).where(Loja.zona_id == zona))
+                    | Contrato.id.in_(select(ServicoLogistico.contrato_id).join(Loja).where(Loja.zona_id == zona))
+                    | Contrato.id.in_(select(RotaEquipa.contrato_id).join(RotaLoja, RotaLoja.rota_id == RotaEquipa.id)
+                                      .join(Loja, RotaLoja.loja_id == Loja.id).where(Loja.zona_id == zona)))
     hoje = date.today()
-    out = [ContratoResumo(**_resumo(c, hoje)) for c in db.scalars(s.order_by(Contrato.numero.desc())).all()]
+    contratos = db.scalars(s.order_by(Contrato.numero.desc())).all()
+    serv = _servicos(db, [c.id for c in contratos if c.tipo == TipoContrato.LOG])
+    out = [ContratoResumo(**_resumo(c, hoje, serv.get(c.id), eq.resumo_contrato(db, c, hoje) if c.tipo == TipoContrato.EQF else None))
+           for c in contratos]
     if q:
         ql = q.lower()
         out = [c for c in out if ql in c.numero.lower() or ql in c.cliente_nome.lower() or ql in (c.marca_nome or "").lower()]
@@ -122,6 +185,11 @@ def editar(cid: int, body: ContratoIn, user: User = Depends(requer("contratos.ed
     c = _carregar(db, cid, user)
     if body.tipo != c.tipo:
         raise HTTPException(422, "O tipo de contrato não pode ser alterado")
+    fora = [ln.loja.nome for ln in c.linhas
+            if ln.inicio < body.inicio or (body.fim and (ln.inicio > body.fim or (ln.fim and ln.fim > body.fim)))]
+    if fora:
+        raise HTTPException(422, "A nova vigência deixa de fora lojas do contrato: " + ", ".join(sorted(fora)) +
+                            ". Ajuste primeiro as datas dessas lojas.")
     antes = {k: getattr(c, k) for k in body.model_dump()}
     for k, v in body.model_dump().items():
         setattr(c, k, v)
@@ -131,6 +199,8 @@ def editar(cid: int, body: ContratoIn, user: User = Depends(requer("contratos.ed
     if c.estado == EstadoContrato.ativo:
         for ln in c.linhas:
             op.regenerar_futuras(db, ln, max(date.today(), ln.inicio), _horizonte())
+        if c.tipo == TipoContrato.EQF:
+            eq.regenerar(db, c, max(date.today(), c.inicio), _horizonte())
     db.commit()
     return _out(_carregar(db, cid, user))
 
@@ -138,7 +208,13 @@ def editar(cid: int, body: ContratoIn, user: User = Depends(requer("contratos.ed
 @router.post("/contratos/{cid}/estado", response_model=ContratoOut)
 def mudar_estado(cid: int, body: EstadoIn, user: User = Depends(requer("contratos.editar")), db: Session = Depends(get_db)):
     c = _carregar(db, cid, user)
-    if body.estado == EstadoContrato.ativo and not c.linhas:
+    if body.estado == EstadoContrato.ativo and c.tipo == TipoContrato.LOG:
+        if not db.scalar(select(ServicoLogistico.id).where(ServicoLogistico.contrato_id == c.id).limit(1)):
+            raise HTTPException(422, "Um contrato de Logística sem serviços não pode ser ativado")
+    elif body.estado == EstadoContrato.ativo and c.tipo == TipoContrato.EQF:
+        if not any(el.escala for el in eq.elementos(db, c.id)):
+            raise HTTPException(422, "Uma equipa fixa sem colaboradores com escala não pode passar a Em curso")
+    elif body.estado == EstadoContrato.ativo and not c.linhas:
         raise HTTPException(422, "Um contrato sem linhas não pode ser ativado")
     op.auditar(db, user, "contrato", c.id, "estado", {"de": c.estado, "para": body.estado})
     c.estado = body.estado
@@ -146,6 +222,8 @@ def mudar_estado(cid: int, body: EstadoIn, user: User = Depends(requer("contrato
     if c.estado == EstadoContrato.ativo:
         for ln in c.linhas:
             op.gerar_ocorrencias(db, ln, ate=_horizonte())
+        if c.tipo == TipoContrato.EQF:
+            eq.gerar(db, c, c.inicio, _horizonte())
     db.commit()
     return _out(_carregar(db, cid, user))
 
@@ -155,8 +233,7 @@ def mudar_estado(cid: int, body: EstadoIn, user: User = Depends(requer("contrato
 def criar_linha(cid: int, body: LinhaIn, user: User = Depends(requer("contratos.editar")), db: Session = Depends(get_db)):
     c = _carregar(db, cid, user)
     obter(db, Loja, body.loja_id, user)
-    if body.inicio < c.inicio or (c.fim and body.inicio > c.fim):
-        raise HTTPException(422, "O início da linha tem de estar dentro da vigência do contrato")
+    _validar_vigencia_linha(c, body.inicio, body.fim)
     ln = LinhaContrato(tenant_id=user.tenant_id, **body.model_dump())
     c.linhas.append(ln)
     db.flush()
@@ -170,6 +247,7 @@ def criar_linha(cid: int, body: LinhaIn, user: User = Depends(requer("contratos.
 @router.put("/linhas/{lid}", response_model=ContratoOut)
 def editar_linha(lid: int, body: LinhaIn, user: User = Depends(requer("contratos.editar")), db: Session = Depends(get_db)):
     ln = obter(db, LinhaContrato, lid, user)
+    _validar_vigencia_linha(ln.contrato, body.inicio, body.fim)
     antes = {k: getattr(ln, k) for k in body.model_dump()}
     for k, v in body.model_dump().items():
         setattr(ln, k, v)
@@ -185,8 +263,6 @@ def editar_linha(lid: int, body: LinhaIn, user: User = Depends(requer("contratos
 def afetar(lid: int, body: AfetarIn, user: User = Depends(requer("planeamento.editar")), db: Session = Depends(get_db)):
     ln = obter(db, LinhaContrato, lid, user)
     col = obter(db, Colaborador, body.colaborador_id, user)
-    if user.perfil == Perfil.supervisor and col.supervisor_id != user.id:
-        raise HTTPException(403, "Só pode afetar colaboradores da sua equipa")
     try:
         op.afetar(db, user, ln, col, body.desde, body.ate)
     except ValueError as e:
@@ -207,7 +283,7 @@ def remover_afetacao(lid: int, desde: date, user: User = Depends(requer("planeam
 def gerar(cid: int, body: GerarIn, user: User = Depends(requer("contratos.editar")), db: Session = Depends(get_db)):
     c = _carregar(db, cid, user)
     if c.estado != EstadoContrato.ativo:
-        raise HTTPException(422, "Só contratos ativos geram ocorrências")
+        raise HTTPException(422, "Só contratos em curso geram ocorrências")
     n = sum(op.gerar_ocorrencias(db, ln, ate=body.ate or _horizonte()) for ln in c.linhas)
     db.commit()
     return {"criadas": n}

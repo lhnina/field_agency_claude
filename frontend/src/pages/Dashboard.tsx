@@ -3,18 +3,21 @@ import { useQuery } from '@tanstack/react-query'
 import { AreaBadge, Badge, Bar, Button, Card, CardHeader, Empty, ErrorBox, Icon, Kpi, Loading, PageHeader } from '../components/ui'
 import { api, session } from '../lib/api'
 import { dataCurta, diaMes, diaSemana, eur, horas } from '../lib/format'
-import type { Ocorrencia } from '../lib/types'
+import type { Ocorrencia, ResumoDoc } from '../lib/types'
 
 type Dash = {
   faturacao_mensal_prevista: number; horas_contratadas_mes: number; horas_planeadas_mes: number; contratos_ativos: number
   contratos_a_terminar: { id: number; numero: string; fim: string }[]
   semana: { total: number; por_atribuir: number; conflitos: number; ausencias: number; horas: number }
   por_atribuir: Ocorrencia[]; alertas_colaboradores: { id: number; nome: string; alertas: string[] }[]
+  documentacao?: ResumoDoc
 }
 
 export default function Dashboard() {
   const user = session.user()
   const q = useQuery({ queryKey: ['dashboard'], queryFn: () => api<Dash>('/dashboard/operacional') })
+  const lg = useQuery({ queryKey: ['dashboard-logistica'], queryFn: () => api<{ proximos_7_dias: number; hoje: number; por_atribuir: number; com_alertas: number }>('/dashboard/logistica') })
+  const eqf = useQuery({ queryKey: ['dashboard-equipas'], queryFn: () => api<{ colaboradores: number; dias_semana: number; por_validar: number; faltas_semana: number; substituicoes_semana: number; ausentes: number }>('/dashboard/equipas') })
   const hoje = new Date()
   if (q.isLoading) return <Card><Loading /></Card>
   if (q.error || !q.data) return <ErrorBox error={q.error} />
@@ -27,7 +30,7 @@ export default function Dashboard() {
         <Link to="/planeamento"><Button variant="primary" icon="cal">Abrir planeamento</Button></Link>
       </PageHeader>
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        <Kpi label="Faturação mensal prevista" value={eur(d.faturacao_mensal_prevista, 0)} sub={`${d.contratos_ativos} contratos ativos · horas contratadas`} />
+        <Kpi label="Faturação mensal prevista" value={eur(d.faturacao_mensal_prevista, 0)} sub={`${d.contratos_ativos} contratos em curso · inclui equipas fixas (custo + gestão)`} />
         <Kpi label="Horas contratadas · mês" value={horas(Math.round(d.horas_contratadas_mes))} sub="horas/semana × 52 ÷ 12" />
         <Kpi label="Horas planeadas · este mês" value={horas(Math.round(d.horas_planeadas_mes))}
           sub={`${Math.round(cobertura)} % das contratadas`} extra={<div className="mt-2"><Bar pct={cobertura} tone={cobertura < 95 ? 'warn' : 'ok'} /></div>} />
@@ -50,10 +53,23 @@ export default function Dashboard() {
         <Card>
           <CardHeader title="Alertas operacionais" />
           <ul className="px-[18px] py-2">
+            {d.documentacao && (d.documentacao.expirados + d.documentacao.em_falta > 0) && <Alerta tone="err" icon="shield"
+              titulo={`Documentação: ${d.documentacao.expirados} expirados · ${d.documentacao.em_falta} em falta`}
+              sub={`${d.documentacao.colaboradores_com_problemas} colaboradores · ${d.documentacao.a_expirar} a expirar em breve`} to="/documentacao" />}
+            {d.documentacao && !(d.documentacao.expirados + d.documentacao.em_falta) && d.documentacao.a_expirar > 0 && <Alerta tone="warn" icon="shield"
+              titulo={`${d.documentacao.a_expirar} documentos a expirar`} sub="Renovar antes da validade" to="/documentacao?estado=a_expirar" />}
+            {lg.data && lg.data.proximos_7_dias > 0 && <Alerta tone={lg.data.por_atribuir ? 'err' : 'warn'} icon="truck"
+              titulo={`Logística: ${lg.data.hoje} serviço${lg.data.hoje === 1 ? '' : 's'} hoje · ${lg.data.proximos_7_dias} nos próximos 7 dias`}
+              sub={`${lg.data.por_atribuir} sem viatura ou motorista · ${lg.data.com_alertas} com alertas`} to="/logistica" />}
+            {eqf.data && eqf.data.colaboradores > 0 && <Alerta tone={eqf.data.por_validar || eqf.data.ausentes ? 'warn' : 'neu'} icon="route"
+              titulo={`Equipas fixas: ${eqf.data.colaboradores} colaborador${eqf.data.colaboradores === 1 ? '' : 'es'} · ${eqf.data.dias_semana} dias esta semana`}
+              sub={[`${eqf.data.por_validar} dia${eqf.data.por_validar === 1 ? '' : 's'} por validar`, eqf.data.ausentes ? `${eqf.data.ausentes} com o colaborador ausente` : '',
+                eqf.data.faltas_semana ? `${eqf.data.faltas_semana} falta${eqf.data.faltas_semana === 1 ? '' : 's'}` : '',
+                eqf.data.substituicoes_semana ? `${eqf.data.substituicoes_semana} substituição(ões)` : ''].filter(Boolean).join(' · ')} to="/equipas" />}
             {d.semana.ausencias > 0 && <Alerta tone="warn" icon="sun" titulo={`${d.semana.ausencias} ${d.semana.ausencias === 1 ? "ausência" : "ausências"} esta semana`} sub="Ver serviços por substituir" to="/ausencias" />}
             {d.alertas_colaboradores.map((c) => <Alerta key={c.id} tone="err" icon="alert" titulo={c.nome} sub={c.alertas.join(' · ')} to="/planeamento" />)}
             {d.contratos_a_terminar.map((c) => <Alerta key={c.id} tone="neu" icon="file" titulo={`${c.numero} termina`} sub={dataCurta(c.fim)} to={`/contratos/${c.id}`} />)}
-            {!d.semana.ausencias && !d.alertas_colaboradores.length && !d.contratos_a_terminar.length && <li className="py-6 text-center text-ink-60 text-sm">Sem alertas.</li>}
+            {!d.semana.ausencias && !d.alertas_colaboradores.length && !(d.documentacao && d.documentacao.expirados + d.documentacao.em_falta + d.documentacao.a_expirar) && !d.contratos_a_terminar.length && !eqf.data?.colaboradores && !lg.data?.proximos_7_dias && <li className="py-6 text-center text-ink-60 text-sm">Sem alertas.</li>}
           </ul>
         </Card>
       </div>
@@ -61,7 +77,7 @@ export default function Dashboard() {
   )
 }
 
-function Alerta({ tone, icon, titulo, sub, to }: { tone: 'warn' | 'err' | 'neu'; icon: 'sun' | 'alert' | 'file'; titulo: string; sub: string; to: string }) {
+function Alerta({ tone, icon, titulo, sub, to }: { tone: 'warn' | 'err' | 'neu'; icon: 'sun' | 'alert' | 'file' | 'shield' | 'truck' | 'route'; titulo: string; sub: string; to: string }) {
   return (
     <li className="flex gap-3 items-start py-2.5 border-b border-line-soft last:border-0">
       <Badge tone={tone} className="!w-[30px] !h-[30px] !p-0 justify-center !rounded-lg"><Icon name={icon} size={16} /></Badge>

@@ -1,9 +1,9 @@
 import { useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AreaBadge, Avatar, Badge, Button, Card, ErrorBox, Icon, IconButton, Loading, Modal, PageHeader, Seg, useToast } from '../components/ui'
 import { api } from '../lib/api'
-import { AREA, addDays, diaMes, diaSemana, horas, iso, intervaloSemana, parseISO, segunda, semanaISO, VINCULO } from '../lib/format'
+import { AREA, addDays, diaMes, diaSemana, horas, iso, intervaloSemana, parseISO, segunda, semanaISO, vinculoTexto } from '../lib/format'
 import type { Candidato, Cliente, IdNome, LinhaColaborador, Ocorrencia, Planeamento as Plan } from '../lib/types'
 
 type Drop = { oc: Ocorrencia; colaboradorId: number; data: string }
@@ -12,14 +12,18 @@ const ALERTA: Record<string, string> = {
   sem_colaborador: 'Sem colaborador',
   colaborador_ausente: 'Colaborador ausente nesta data',
   excede_horas_dia: 'Excede 8 h no dia',
+  documentacao: 'Documentação em falta ou expirada',
 }
 
 export default function Planeamento() {
   const qc = useQueryClient()
   const toast = useToast()
+  const [sp, setSp] = useSearchParams()
   const [inicio, setInicio] = useState(() => iso(segunda(new Date())))
   const [tipo, setTipo] = useState<string>('')
-  const [zona, setZona] = useState('')
+  const [zona, setZona] = useState(sp.get('zona') ?? '')
+  const colaborador = sp.get('colaborador') ?? ''
+  const limparColaborador = () => { sp.delete('colaborador'); sp.delete('zona'); setSp(sp, { replace: true }) }
   const [cliente, setCliente] = useState('')
   const [supervisor, setSupervisor] = useState('')
   const [sel, setSel] = useState<number | null>(null)
@@ -27,7 +31,7 @@ export default function Planeamento() {
   const [subst, setSubst] = useState<Ocorrencia | null>(null)
   const [dragOver, setDragOver] = useState<string | null>(null)
 
-  const params = { inicio, tipo, zona_id: zona, cliente_id: cliente, supervisor_id: supervisor }
+  const params = { inicio, tipo, zona_id: zona, cliente_id: cliente, supervisor_id: supervisor, colaborador_id: colaborador }
   const q = useQuery({ queryKey: ['planeamento', params], queryFn: () => api<Plan>('/planeamento', { params }) })
   const zonas = useQuery({ queryKey: ['zonas'], queryFn: () => api<IdNome[]>('/zonas') })
   const clientes = useQuery({ queryKey: ['clientes'], queryFn: () => api<Cliente[]>('/clientes') })
@@ -93,16 +97,22 @@ export default function Planeamento() {
       </PageHeader>
 
       <div className="flex flex-wrap items-center gap-2">
-        <FiltroSelect label="Zona" value={zona} onChange={setZona} options={zonas.data} />
+        {colaborador && (
+          <button type="button" onClick={limparColaborador} className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-petrol-600 bg-[#E9F4F2] text-[13px] text-petrol-700">
+            Colaborador: <b className="font-medium">{data?.colaboradores.find((c) => String(c.id) === colaborador)?.nome ?? '…'}</b><Icon name="x" size={14} />
+          </button>
+        )}
+        <FiltroSelect label={colaborador ? 'Por atribuir na zona' : 'Zona'} value={zona} onChange={setZona} options={zonas.data} />
         <FiltroSelect label="Cliente" value={cliente} onChange={setCliente} options={clientes.data} />
         <FiltroSelect label="Supervisor" value={supervisor} onChange={setSupervisor} options={sups.data} />
-        {(zona || cliente || supervisor) && <Button variant="ghost" size="sm" onClick={() => { setZona(''); setCliente(''); setSupervisor('') }}>Limpar filtros</Button>}
+        {(zona || cliente || supervisor || colaborador) && <Button variant="ghost" size="sm" onClick={() => { setZona(''); setCliente(''); setSupervisor(''); if (colaborador) limparColaborador() }}>Limpar filtros</Button>}
         <span className="flex-1" />
         {data && <>
           <Badge>{data.resumo.total} turnos · {horas(data.resumo.horas)}</Badge>
           <Badge tone={data.resumo.por_atribuir ? 'err' : 'ok'} dot>{data.resumo.por_atribuir} por atribuir</Badge>
           <Badge tone={data.resumo.ausencias ? 'warn' : 'neu'} dot>{data.resumo.ausencias} {data.resumo.ausencias === 1 ? "ausência" : "ausências"}</Badge>
           <Badge tone={data.resumo.conflitos ? 'err' : 'neu'} dot>{data.resumo.conflitos} conflitos</Badge>
+          {!!data.resumo.documentacao && <Link to="/documentacao" title="Turnos com documentação obrigatória em falta ou expirada"><Badge tone="warn" dot>{data.resumo.documentacao} com documentação pendente</Badge></Link>}
         </>}
       </div>
 
@@ -169,7 +179,7 @@ export default function Planeamento() {
             <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-60">
               Turno selecionado <AreaBadge tipo={selecionada.tipo} />
               {selecionada.substituicao && <Badge tone="info">Substituição</Badge>}
-              {selecionada.alertas.map((a) => <Badge key={a} tone="err" dot>{ALERTA[a] ?? a}</Badge>)}
+              {selecionada.alertas.map((a) => <Badge key={a} tone={a === 'documentacao' ? 'warn' : 'err'} dot>{ALERTA[a] ?? a}</Badge>)}
             </div>
             <div className="font-semibold text-[14.5px] mt-0.5">
               {diaSemana(selecionada.data)} {diaMes(selecionada.data)}{selecionada.hora_inicio ? ` · ${selecionada.hora_inicio}` : ''} · {horas(selecionada.horas)} · {selecionada.loja}
@@ -180,6 +190,10 @@ export default function Planeamento() {
               {selecionada.substituicao && ` (substitui ${nomeColab(selecionada.colaborador_previsto_id)})`}
               {selecionada.reagendada_feriado && ` · reagendado de ${diaMes(selecionada.data_original)} (feriado)`}
             </div>
+            {!!selecionada.documentacao?.length && (
+              <div className="text-[12.5px] text-warn-fg flex gap-1.5 mt-1"><Icon name="shield" size={14} className="mt-0.5 flex-none" />
+                <span>{selecionada.documentacao.join(' · ')} · <Link to={`/colaboradores?id=${selecionada.colaborador_id}`} className="underline">ver documentos</Link></span></div>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             <Button icon="swap" onClick={() => setSubst(selecionada)}>{selecionada.colaborador_id ? 'Substituir' : 'Atribuir'}</Button>
@@ -227,7 +241,7 @@ function ColabRow({ c, idx, children }: { c: LinhaColaborador; idx: number; chil
         <Avatar nome={c.nome} tone={idx} />
         <div className="min-w-0">
           <div className="font-medium text-[13px] leading-tight">{c.nome}</div>
-          <div className="text-xs text-ink-60">{VINCULO[c.vinculo].label}{c.funcao ? ` · ${c.funcao}` : ''}</div>
+          <div className="text-xs text-ink-60">{vinculoTexto(c)}{c.funcao ? ` · ${c.funcao}` : ''}</div>
           <div className="text-xs text-ink-60 num">{horas(c.horas_semana)}{c.limite_semana ? ` / ${c.limite_semana} h` : ' · prestador'}</div>
           {c.limite_semana && <div className="w-24 mt-1"><Bar2 pct={pct} /></div>}
           {c.alertas.map((a) => <div key={a} className="text-xs text-err-fg mt-1 flex gap-1"><Icon name="alert" size={12} className="mt-0.5" />{a}</div>)}
@@ -312,7 +326,7 @@ function SubstDialog({ oc, onClose, onEscolher }: { oc: Ocorrencia; onClose: () 
             <li key={c.colaborador_id} className="flex items-start gap-3 py-2.5">
               <Avatar nome={c.nome} tone={i} />
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-[13.5px]">{c.nome} <span className="text-xs text-ink-60 font-normal">· {VINCULO[c.vinculo].label} · {horas(c.horas_semana)} nesta semana</span></div>
+                <div className="font-medium text-[13.5px]">{c.nome} <span className="text-xs text-ink-60 font-normal">· {vinculoTexto(c)} · {horas(c.horas_semana)} nesta semana</span></div>
                 <div className="flex flex-wrap gap-1 mt-1">
                   {c.motivos.map((m) => <Badge key={m} tone="ok">{m}</Badge>)}
                   {c.alertas.map((m) => <Badge key={m} tone="warn">{m}</Badge>)}
