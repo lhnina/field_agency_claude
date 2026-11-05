@@ -44,7 +44,34 @@ export type ContratoResumo = {
   marca_nome: string | null; descricao: string | null; evento: string | null; data: string; inicio: string; fim: string | null
   versao: number; n_linhas: number; horas_semana: string; horas_mes: string; valor_mensal: string; linhas_por_atribuir: number
 }
-export type Contrato = ContratoResumo & { marca_id: number | null; observacoes: string | null; linhas: Linha[] }
+export type Contrato = ContratoResumo & {
+  marca_id: number | null; observacoes: string | null; linhas: Linha[]
+  valor_gestao: string | null; acrescimo_despesas_pct: string
+}
+
+// Equipas Fixas
+export type RotaEquipa = { id: number; nome: string; observacoes: string | null; ativo: boolean; lojas: { id: number; nome: string; localidade: string | null }[] }
+export type DiaEscala = { dia: number; rota_id: number; rota?: string; hora_inicio: string; hora_fim: string; pausa_min: number; horas?: number }
+export type ElementoEquipa = {
+  id: number; colaborador_id: number; colaborador: string; numero: string; funcao: string | null; desde: string; ate: string | null
+  valor_gestao: number | null; valor_gestao_efetivo: number; observacoes: string | null; ativo: boolean; horas_semana: number
+  custo_hora: number; escala: DiaEscala[]
+}
+export type Equipa = {
+  rotas: RotaEquipa[]; elementos: ElementoEquipa[]; valor_gestao: number | null; acrescimo_despesas_pct: number
+  resumo: { elementos: number; horas_semana: number; horas_mes: number; gestao_mensal: number; sem_escala: number }
+}
+export type EstadoDiaEquipa = 'planeado' | 'validado' | 'falta' | 'cancelado'
+export type DiaEquipa = {
+  id: number; contrato_id: number; contrato_numero: string; cliente: string; elemento_id: number; titular_id: number; titular: string
+  colaborador_id: number; colaborador: string; substituicao: boolean; rota_id: number | null; rota: string | null; lojas: string[]
+  data: string; hora_inicio: string; hora_fim: string; pausa_min: number; horas_planeadas: number; horas_reais: number | null
+  estado: EstadoDiaEquipa; alterado: boolean; observacao: string | null; alertas: string[]
+}
+export type DespesaEquipa = {
+  id: number; data: string; tipo: string; tipo_label: string; descricao: string | null; valor: number
+  elemento_id: number | null; colaborador: string | null; refaturar: boolean
+}
 
 export type Ocorrencia = {
   id: number; data: string; data_original: string; reagendada_feriado: boolean; hora_inicio: string | null; horas: number

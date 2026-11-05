@@ -19,6 +19,7 @@ import PreFaturacao from './pages/PreFaturacao'
 import Apuramentos from './pages/Apuramentos'
 import Importacao from './pages/Importacao'
 import Logistica from './pages/Logistica'
+import EquipasFixas from './pages/EquipasFixas'
 import Configuracao from './pages/Configuracao'
 import Documentacao from './pages/Documentacao'
 import type { ReactNode } from 'react'
@@ -41,6 +42,7 @@ createRoot(document.getElementById('root')!).render(
               <Route path="planeamento" element={<Planeamento />} />
               <Route path="ausencias" element={<Ausencias />} />
               <Route path="logistica" element={<Logistica />} />
+              <Route path="equipas" element={<EquipasFixas />} />
               <Route path="contratos" element={<Contratos />} />
               <Route path="contratos/:id" element={<ContratoDetalhe />} />
               <Route path="colaboradores" element={<Colaboradores />} />

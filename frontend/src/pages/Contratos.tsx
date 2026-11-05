@@ -47,10 +47,10 @@ export default function Contratos() {
                     <td><AreaBadge tipo={c.tipo} /></td>
                     <td><Badge tone={ESTADO_CONTRATO[c.estado].tone} dot>{ESTADO_CONTRATO[c.estado].label}</Badge></td>
                     <td className="text-[12.5px] text-ink-60 num">{dataCurta(c.inicio)} – {c.fim ? dataCurta(c.fim) : 'sem termo'}</td>
-                    <td className="text-right num">{c.n_linhas}{c.tipo === 'LOG' && <span className="text-xs text-ink-60"> serv.</span>}{c.linhas_por_atribuir > 0 && <div className="text-xs text-err-fg">{c.linhas_por_atribuir} por atribuir</div>}</td>
+                    <td className="text-right num">{c.n_linhas}{c.tipo === 'LOG' && <span className="text-xs text-ink-60"> serv.</span>}{c.tipo === 'EQF' && <span className="text-xs text-ink-60"> colab.</span>}{c.linhas_por_atribuir > 0 && <div className="text-xs text-err-fg">{c.linhas_por_atribuir} {c.tipo === 'EQF' ? 'sem escala' : 'por atribuir'}</div>}</td>
                     <td className="text-right num">{c.tipo === 'LOG' ? '—' : horas(c.horas_semana)}</td>
                     <td className="text-right num">{c.tipo === 'LOG' ? '—' : horas(c.horas_mes)}</td>
-                    <td className="text-right num font-medium">{eur(c.valor_mensal)}{c.tipo === 'LOG' && <div className="text-xs text-ink-60 font-normal">total dos serviços</div>}</td>
+                    <td className="text-right num font-medium">{eur(c.valor_mensal)}{c.tipo === 'LOG' && <div className="text-xs text-ink-60 font-normal">total dos serviços</div>}{c.tipo === 'EQF' && <div className="text-xs text-ink-60 font-normal">custo + gestão previstos</div>}</td>
                     <td className="text-right"><Icon name="cr" size={16} className="text-ink-60" /></td>
                   </tr>
                 ))}
@@ -72,13 +72,16 @@ export function NovoContrato({ onClose, onCriado, inicial }: { onClose: () => vo
   const [f, setF] = useState({
     tipo: (inicial?.tipo ?? 'REP') as TipoContrato, cliente_id: inicial ? String(inicial.cliente_id) : '', marca_id: inicial?.marca_id ? String(inicial.marca_id) : '',
     data: inicial?.data ?? hoje, inicio: inicial?.inicio ?? hoje, fim: inicial?.fim ?? '', descricao: inicial?.descricao ?? '', evento: inicial?.evento ?? '', observacoes: inicial?.observacoes ?? '',
+    valor_gestao: inicial?.valor_gestao != null ? String(Number(inicial.valor_gestao)) : '', acrescimo_despesas_pct: inicial ? String(Number(inicial.acrescimo_despesas_pct ?? 0)) : '0',
   })
+  const dec = (v: string) => (v.trim() === '' ? null : Number(v.replace(',', '.')))
   const set = (k: keyof typeof f) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value })
   const cli = clientes.data?.find((c) => String(c.id) === f.cliente_id)
   const m = useMutation({
     mutationFn: () => api<Contrato>(inicial ? `/contratos/${inicial.id}` : '/contratos', {
       method: inicial ? 'PUT' : 'POST',
-      body: { ...f, cliente_id: Number(f.cliente_id), marca_id: f.marca_id ? Number(f.marca_id) : null, fim: f.fim || null, descricao: f.descricao || null, evento: f.evento || null, observacoes: f.observacoes || null },
+      body: { ...f, cliente_id: Number(f.cliente_id), marca_id: f.marca_id ? Number(f.marca_id) : null, fim: f.fim || null, descricao: f.descricao || null, evento: f.evento || null, observacoes: f.observacoes || null,
+        valor_gestao: f.tipo === 'EQF' ? dec(f.valor_gestao) : null, acrescimo_despesas_pct: f.tipo === 'EQF' ? dec(f.acrescimo_despesas_pct) ?? 0 : 0 },
     }),
     onSuccess: (c) => { qc.invalidateQueries({ queryKey: ['contratos'] }); qc.invalidateQueries({ queryKey: ['contrato', c.id] }); toast(inicial ? 'Contrato atualizado' : `Contrato ${c.numero} criado`); onCriado(c) },
   })
@@ -90,7 +93,7 @@ export function NovoContrato({ onClose, onCriado, inicial }: { onClose: () => vo
         <Field label="Tipo">{(id) => (
           <select id={id} className="inp" value={f.tipo} onChange={set('tipo')} disabled={!!inicial}>
             <option value="REP">Reposição</option><option value="PRO">Promoção / ativação</option>
-            <option value="LOG">Logística</option><option value="EQF" disabled>Equipas Fixas (próximo incremento)</option>
+            <option value="LOG">Logística</option><option value="EQF">Equipas Fixas</option>
           </select>)}</Field>
         <Field label="Data do contrato">{(id) => <DataInput id={id} value={f.data} onChange={(v) => setF({ ...f, data: v })} />}</Field>
         <Field label="Cliente">{(id) => (
@@ -106,6 +109,10 @@ export function NovoContrato({ onClose, onCriado, inicial }: { onClose: () => vo
         {f.tipo === 'PRO'
           ? <Field label="Evento / campanha" className="col-span-2">{(id) => <input id={id} className="inp" value={f.evento} onChange={set('evento')} placeholder="Ex.: Campanha de Natal" />}</Field>
           : <Field label="Descrição" className="col-span-2">{(id) => <input id={id} className="inp" value={f.descricao} onChange={set('descricao')} placeholder="Ex.: Reposição em lojas da Grande Lisboa" />}</Field>}
+        {f.tipo === 'EQF' && <>
+          <Field label="Valor de gestão (€/colaborador/mês)" hint="Somado ao custo real de cada colaborador">{(id) => <input id={id} inputMode="decimal" className="inp num" value={f.valor_gestao} onChange={set('valor_gestao')} placeholder="Ex.: 280" />}</Field>
+          <Field label="Acréscimo nas despesas (%)" hint="Sobre as despesas refaturadas">{(id) => <input id={id} inputMode="decimal" className="inp num" value={f.acrescimo_despesas_pct} onChange={set('acrescimo_despesas_pct')} />}</Field>
+        </>}
         <Field label="Observações" className="col-span-2">{(id) => <textarea id={id} className="inp h-20 py-2" value={f.observacoes} onChange={set('observacoes')} />}</Field>
       </div>
       {m.error ? <div className="mt-3"><ErrorBox error={m.error} /></div> : null}

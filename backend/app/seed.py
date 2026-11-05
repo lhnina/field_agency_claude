@@ -96,8 +96,10 @@ def run(reset: bool = True) -> None:
         ("0902", "Tiago Moreira", "Promotor(a)", "mcd", "Loures", "rui", "10.80", "0001111"),
         ("0645", "Marco Dias", "Repositor(a)", TipoVinculo.sem_termo, "Amadora", "rui", "11.40", "1111100"),
         ("0388", "Rita Gonçalves", "Repositor(a)", TipoVinculo.a_termo, "Sintra", "sara", "11.40", "1111100"),
+        ("0120", "Miguel Rocha", "Merchandiser", TipoVinculo.sem_termo, "Lisboa", "rui", "10.60", "1111100"),
+        ("0131", "Luísa Pires", "Merchandiser", TipoVinculo.a_termo, "Loures", "rui", "10.60", "1111100"),
     ]
-    db.add_all([Funcao(tenant_id=T, nome=n) for n in ("Repositor(a)", "Promotor(a)", "Chefe de equipa")])
+    db.add_all([Funcao(tenant_id=T, nome=n) for n in ("Repositor(a)", "Promotor(a)", "Chefe de equipa", "Merchandiser")])
     cols = {}
     for num, nome, funcao, vinc, z, s, custo, disp in col_def:
         mcd = vinc == "mcd"
@@ -199,6 +201,9 @@ def run(reset: bool = True) -> None:
     lg = contrato(TipoContrato.LOG, "Quinta do Vale Sumos", 2026, date(2026, 9, 1), date(2026, 12, 31),
                   descricao="Entregas e montagem de expositores — campanha de inverno")
     _logistica(db, T, lg, lojas, cols, users["hugo"], hoje)
+    eqf = contrato(TipoContrato.EQF, "Montado Vinhos", 2026, desde, descricao="Equipa fixa · 2 merchandisers em rota")
+    eqf.valor_gestao, eqf.acrescimo_despesas_pct = D("280"), D("5")
+    _equipas(db, T, eqf, lojas, cols, users["rui"], hoje)
     db.commit()
     db.close()
     print("Dados de demonstração criados. Utilizadores: marta|hugo|joana|tomas|rui|sara|admin@promovida.pt / demo1234")
@@ -279,6 +284,55 @@ def _credenciais(db, T, cols, autor, hoje) -> None:
         cols[nome].niss = f"1{zlib.crc32(nome.encode()) % 10**10:010d}"
     db.flush()
 
+
+
+def _equipas(db, T, c, lojas, cols, sup, hoje) -> None:
+    """Equipa fixa com rotas: dias passados validados (com uma falta e uma substituição) e despesas do mês."""
+    from app.models import (DespesaEquipa, ElementoEquipa, EscalaEquipa, EstadoServicoEquipa as E, RotaEquipa, RotaLoja,
+                            ServicoEquipa)
+    from app.services import equipas as eq
+    rotas = {}
+    for nome, ls in [("Rota Lisboa Centro", ["Continente Colombo", "Pingo Doce Benfica", "Pingo Doce Telheiras"]),
+                     ("Rota Amadora", ["Continente Amadora", "Auchan Amadora", "Auchan Alfragide"]),
+                     ("Rota Loures e Odivelas", ["Pingo Doce Loures", "Intermarché Odivelas", "Lidl Odivelas"])]:
+        r = RotaEquipa(tenant_id=T, contrato_id=c.id, nome=nome, lojas=[RotaLoja(loja_id=lojas[x].id, ordem=i) for i, x in enumerate(ls)])
+        db.add(r)
+        rotas[nome] = r
+    db.flush()
+    plano = {"Miguel Rocha": ["Rota Lisboa Centro", "Rota Amadora", "Rota Lisboa Centro", "Rota Amadora", "Rota Lisboa Centro"],
+             "Luísa Pires": ["Rota Loures e Odivelas"] * 4 + ["Rota Amadora"]}
+    els = {}
+    for nome, dias in plano.items():
+        el = ElementoEquipa(tenant_id=T, contrato_id=c.id, colaborador_id=cols[nome].id, desde=c.inicio,
+                            escala=[EscalaEquipa(dia=i, rota_id=rotas[r].id, hora_inicio="09:00", hora_fim="18:00", pausa_min=60)
+                                    for i, r in enumerate(dias)])
+        db.add(el)
+        els[nome] = el
+    db.flush()
+    eq.gerar(db, c, c.inicio, hoje + timedelta(days=56))
+    passados = db.scalars(select(ServicoEquipa).where(ServicoEquipa.contrato_id == c.id, ServicoEquipa.data < hoje)
+                          .order_by(ServicoEquipa.data, ServicoEquipa.id)).all()
+    ini_mes = hoje.replace(day=1)
+    for i, s in enumerate(passados):
+        if s.data >= hoje - timedelta(days=3):
+            continue  # últimos dias por validar
+        if i == 7:
+            s.estado, s.observacao, s.alterado = E.falta, "Consulta médica", True
+            continue
+        if i == 12:
+            s.colaborador_id, s.alterado = cols["Marco Dias"].id, True
+        s.horas_reais = s.horas_planeadas - (D("1") if i % 9 == 4 else D("0"))
+        s.estado, s.validado_por_id = E.validado, sup.id
+    for data, tipo, desc, valor, el, refat in [
+            (c.inicio + timedelta(days=2), "viatura", "Renting da viatura (mês)", "420.00", None, True),
+            (c.inicio + timedelta(days=9), "combustivel", "Combustível", "186.40", "Miguel Rocha", True),
+            (c.inicio + timedelta(days=10), "telemovel", "Telemóveis", "30.00", None, False),
+            (ini_mes + timedelta(days=1), "viatura", "Renting da viatura (mês)", "420.00", None, True),
+            (ini_mes + timedelta(days=2), "portagens", "Portagens", "23.70", "Luísa Pires", True)]:
+        if data <= hoje:
+            db.add(DespesaEquipa(tenant_id=T, contrato_id=c.id, data=data, tipo=tipo, descricao=desc, valor=D(valor),
+                                 elemento_id=els[el].id if el else None, refaturar=refat, registado_por_id=sup.id))
+    db.flush()
 
 
 def _logistica(db, T, c, lojas, cols, autor, hoje) -> None:

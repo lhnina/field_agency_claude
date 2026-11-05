@@ -12,7 +12,10 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Cliente, Colaborador, Contrato, LinhaContrato, Loja, Marca, Ocorrencia, Perfil, ServicoLogistico, User
+from app.models import (
+    Cliente, Colaborador, Contrato, DespesaEquipa, ElementoEquipa, LinhaContrato, Loja, Marca, Ocorrencia, Perfil, RotaEquipa,
+    ServicoEquipa, ServicoLogistico, User,
+)
 
 
 def clientes_permitidos(db: Session, user: User) -> set[int] | None:
@@ -49,6 +52,12 @@ def servico_na_zona(s: ServicoLogistico, zona: int) -> bool:
             or (s.ajudante is not None and s.ajudante.zona_id == zona))
 
 
+def servico_equipa_na_zona(s: ServicoEquipa, zona: int) -> bool:
+    """Dia de equipa fixa visível ao supervisor: colaborador da zona, ou rota com lojas da zona."""
+    return (s.colaborador is not None and s.colaborador.zona_id == zona) or (
+        s.rota is not None and any(rl.loja.zona_id == zona for rl in s.rota.lojas))
+
+
 def cliente_de(obj) -> int | None:
     if isinstance(obj, Cliente):
         return obj.id
@@ -58,9 +67,19 @@ def cliente_de(obj) -> int | None:
         return obj.contrato.cliente_id
     if isinstance(obj, Ocorrencia):
         return obj.linha.contrato.cliente_id
-    if isinstance(obj, ServicoLogistico):
-        return obj.contrato.cliente_id
+    if isinstance(obj, (ServicoLogistico, RotaEquipa, ElementoEquipa, ServicoEquipa, DespesaEquipa)):
+        return db_contrato_cliente(obj)
     return None
+
+
+def db_contrato_cliente(obj) -> int | None:
+    c = getattr(obj, "contrato", None)
+    if c is not None:
+        return c.cliente_id
+    from sqlalchemy.orm import object_session
+    ses = object_session(obj)
+    c = ses.get(Contrato, obj.contrato_id) if ses is not None else None
+    return c.cliente_id if c else None
 
 
 def verificar(db: Session, user: User, obj) -> None:
@@ -69,6 +88,8 @@ def verificar(db: Session, user: User, obj) -> None:
     if zona is not None and isinstance(obj, (Loja, Colaborador)) and obj.zona_id != zona:
         raise HTTPException(404, "Registo não encontrado")
     if zona is not None and isinstance(obj, ServicoLogistico) and not servico_na_zona(obj, zona):
+        raise HTTPException(404, "Registo não encontrado")
+    if zona is not None and isinstance(obj, ServicoEquipa) and not servico_equipa_na_zona(obj, zona):
         raise HTTPException(404, "Registo não encontrado")
     permitidos = clientes_permitidos(db, user)
     if permitidos is None:

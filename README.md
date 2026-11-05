@@ -144,9 +144,14 @@ Clientes, lojas e colaboradores que já existem são atualizados; as células va
 - **Credenciais**: emitidas a partir de modelos Word (.docx) guardados e versionados (Documentação › Modelos de credencial). Os campos escrevem-se no Word como `{{nome}}`; os campos de impressão em série (MERGEFIELD) do modelo antigo também funcionam. Ao afetar um colaborador a uma loja, a plataforma pergunta se quer emitir uma credencial nova ou por substituição. Cada credencial fica guardada na ficha do colaborador, com a versão do modelo usada.
 - Os dados da empresa usados nas credenciais (sede, registo, seguradora e apólice) estão em Configuração › Parâmetros.
 
+## Equipas Fixas
+
+- Contrato do tipo Equipas Fixas: rotas (lojas visitadas num dia, por ordem) e colaboradores com escala semanal (rota e horário de cada dia, com pausa).
+- Os dias de trabalho geram-se a partir da escala (sem feriados nacionais nem da zona do colaborador). Em Operação › Equipas fixas validam-se os dias, registam-se faltas e substituições de um só dia.
+- Faturação mensal: custo real (horas validadas × custo/hora com encargos) + valor de gestão por colaborador (em proporção dos dias na equipa) + despesas refaturadas com acréscimo. As horas validadas entram no apuramento de remunerações. O mês só fecha com todos os dias validados ou com falta.
+
 ## Próximos passos
 
-- Equipas Fixas: a quarta área de contrato.
 - Rentabilidade: margem por cliente, contrato, loja e colaborador ao longo do tempo.
 - App do colaborador (PWA): escala, confirmação e registo de horas; na Logística, km, horas e comprovativo pelo motorista. Passa a alimentar a origem "registo" na validação.
 - Envio da pré-faturação para o ERP, como documento interno com detalhe por loja, e exportação do apuramento para o processamento salarial.

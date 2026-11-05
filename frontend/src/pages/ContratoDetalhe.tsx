@@ -8,6 +8,7 @@ import { AreaBadge, Avatar, Badge, Button, Card, Empty, ErrorBox, Field, Icon, L
 import { DataInput } from '../components/DataInput'
 import { InsigniaLogo } from '../components/InsigniaLogo'
 import { ServicosContrato } from './Logistica'
+import { EquipaContrato } from './EquipasFixas'
 import { api } from '../lib/api'
 import { ESTADO_CONTRATO, dataCurta, eur, horas, iso, num } from '../lib/format'
 import { DIAS } from '../lib/types'
@@ -56,7 +57,7 @@ export default function ContratoDetalhe() {
             <AreaBadge tipo={c.tipo} /><Badge tone={est.tone} dot>{est.label}</Badge><Badge>Versão {c.versao}</Badge>
           </div>
           <div className="text-[12.5px] text-ink-60 mt-1.5">
-            Vigência {dataCurta(c.inicio)} – {c.fim ? dataCurta(c.fim) : 'sem termo'} · Faturação: horas contratadas (h/semana × 52 ÷ 12){c.marca_nome ? ` · Marca ${c.marca_nome}` : ''}
+            Vigência {dataCurta(c.inicio)} – {c.fim ? dataCurta(c.fim) : 'sem termo'} · Faturação: {c.tipo === 'EQF' ? 'custo real com encargos + valor de gestão + despesas refaturadas' : c.tipo === 'LOG' ? 'preço de cada serviço executado' : c.tipo === 'PRO' ? 'horas planeadas da campanha' : 'horas contratadas (h/semana × 52 ÷ 12)'}{c.marca_nome ? ` · Marca ${c.marca_nome}` : ''}
           </div>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -67,13 +68,19 @@ export default function ContratoDetalhe() {
           {(c.estado === 'ativo' || c.estado === 'suspenso') && <Button onClick={() => setTerminar(true)}>Terminar</Button>}
           {c.estado === 'ativo' && (c.tipo === 'LOG'
             ? <Button variant="primary" icon="truck" onClick={() => nav('/logistica')}>Ver na logística</Button>
+            : c.tipo === 'EQF' ? <Button variant="primary" icon="route" onClick={() => nav('/equipas')}>Ver nas equipas fixas</Button>
             : <Button variant="primary" icon="cal" onClick={() => nav('/planeamento')}>Ver no planeamento</Button>)}
         </div>
       </div>
 
       <Card className="overflow-hidden">
         <div className="grid grid-cols-2 md:grid-cols-4 border-b border-line-soft">
-          {(c.tipo === 'LOG' ? [
+          {(c.tipo === 'EQF' ? [
+            ['Previsto/mês', eur(c.valor_mensal), 'custo com encargos + gestão'],
+            ['Colaboradores', String(c.n_linhas), c.linhas_por_atribuir ? `${c.linhas_por_atribuir} sem escala` : `${horas(c.horas_semana)} por semana`],
+            ['Valor de gestão', c.valor_gestao != null ? `${eur(c.valor_gestao)}` : '—', 'por colaborador e mês'],
+            ['Acréscimo nas despesas', `${num(Number(c.acrescimo_despesas_pct ?? 0))} %`, 'sobre as refaturadas'],
+          ] : c.tipo === 'LOG' ? [
             ['Valor dos serviços', eur(c.valor_mensal), 'soma dos serviços não cancelados'],
             ['Serviços', String(c.n_linhas), `vigência ${dataCurta(c.inicio)} – ${c.fim ? dataCurta(c.fim) : 'sem termo'}`],
             ['Linhas por atribuir', String(c.linhas_por_atribuir), c.linhas_por_atribuir ? 'sem viatura ou motorista' : 'todos atribuídos'],
@@ -91,7 +98,7 @@ export default function ContratoDetalhe() {
             </div>
           ))}
         </div>
-        {c.tipo === 'LOG' ? <ServicosContrato contrato={c} /> : <>
+        {c.tipo === 'EQF' ? <EquipaContrato contrato={c} /> : c.tipo === 'LOG' ? <ServicosContrato contrato={c} /> : <>
         <div className="flex flex-wrap items-center gap-2 px-3.5 py-3 bg-[#FAFBF9] border-b border-line-soft">
           <h3 className="text-[14.5px] font-semibold">Linhas por loja</h3>
           <span className="text-[12.5px] text-ink-60">as horas de cada dia são distribuídas pelo colaborador</span>
@@ -177,7 +184,7 @@ export default function ContratoDetalhe() {
         <Modal title={`Terminar ${c.numero}`} onClose={() => setTerminar(false)} width={460}
           footer={<><Button variant="ghost" onClick={() => setTerminar(false)}>Cancelar</Button>
             <Button variant="danger" loading={estado.isPending} onClick={() => estado.mutate('terminado', { onSuccess: () => setTerminar(false) })}>Terminar contrato</Button></>}>
-          <p className="text-[13.5px] text-ink-80">O contrato deixa de aparecer no planeamento{c.tipo === 'LOG' ? ' e na logística' : ''}. Nada é apagado: o histórico, as horas já registadas e a faturação mantêm-se.</p>
+          <p className="text-[13.5px] text-ink-80">O contrato deixa de aparecer no planeamento{c.tipo === 'LOG' ? ' e na logística' : c.tipo === 'EQF' ? ' e nas equipas fixas' : ''}. Nada é apagado: o histórico, as horas já registadas e a faturação mantêm-se.</p>
         </Modal>
       )}
     </>

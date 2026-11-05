@@ -252,6 +252,9 @@ class ContratoIn(BaseModel):
     descricao: str | None = None
     evento: str | None = None
     observacoes: str | None = None
+    # Equipas Fixas
+    valor_gestao: Decimal | None = Field(default=None, ge=0)
+    acrescimo_despesas_pct: Decimal = Field(default=Decimal("0"), ge=0, le=100)
 
     @model_validator(mode="after")
     def _datas(self):
@@ -284,6 +287,8 @@ class ContratoResumo(ORM):
 class ContratoOut(ContratoResumo):
     marca_id: int | None
     observacoes: str | None
+    valor_gestao: Decimal | None = None
+    acrescimo_despesas_pct: Decimal = Decimal("0")
     linhas: list[LinhaOut]
 
 

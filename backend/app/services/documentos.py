@@ -115,6 +115,17 @@ def servicos_vigentes(db: Session, ids: list[int], hoje: date) -> dict[int, set[
                              or_(LinhaContrato.fim.is_(None), LinhaContrato.fim >= hoje))).all()
     for cid, cli, ins in rows:
         out.setdefault(cid, set()).add((cli, ins))
+    # Equipas Fixas: cliente e insígnias das lojas das rotas da escala
+    from app.models import ElementoEquipa, EscalaEquipa, RotaLoja  # import local: evita ciclo
+    rows = db.execute(select(ElementoEquipa.colaborador_id, Contrato.cliente_id, Loja.insignia_id)
+                      .join(Contrato, ElementoEquipa.contrato_id == Contrato.id)
+                      .join(EscalaEquipa, EscalaEquipa.elemento_id == ElementoEquipa.id)
+                      .join(RotaLoja, RotaLoja.rota_id == EscalaEquipa.rota_id)
+                      .join(Loja, RotaLoja.loja_id == Loja.id)
+                      .where(ElementoEquipa.colaborador_id.in_(ids), or_(ElementoEquipa.ate.is_(None), ElementoEquipa.ate >= hoje),
+                             Contrato.estado.in_((EstadoContrato.ativo, EstadoContrato.proposta)))).all()
+    for cid, cli, ins in rows:
+        out.setdefault(cid, set()).add((cli, ins))
     return out
 
 

@@ -29,13 +29,14 @@ export default function PreFaturacao() {
       <PageHeader crumb="Financeiro" title="Pré-faturação"
         sub={area === 'REP' ? 'Reposição: faturada pelas horas contratadas (h/semana × 52 ÷ 12 × preço), em proporção dos dias de vigência no mês. As lojas sem colaborador também são faturadas.'
           : area === 'LOG' ? 'Logística: faturada pelo preço de cada serviço executado no mês. Os serviços por executar aparecem para controlo, sem valor.'
+          : area === 'EQF' ? 'Equipas Fixas: custo real de cada colaborador (horas validadas × custo/hora com encargos), mais o valor de gestão mensal (em proporção dos dias na equipa) e as despesas refaturadas.'
           : 'Promoções: faturadas pelas horas planeadas da campanha no mês. As lojas sem colaborador também são faturadas.'}>
-        <Seg label="Área" value={area} onChange={setArea} options={[{ value: 'REP', label: 'Reposição' }, { value: 'PRO', label: 'Promoções' }, { value: 'LOG', label: 'Logística' }]} />
+        <Seg label="Área" value={area} onChange={setArea} options={[{ value: 'REP', label: 'Reposição' }, { value: 'PRO', label: 'Promoções' }, { value: 'LOG', label: 'Logística' }, { value: 'EQF', label: 'Equipas Fixas' }]} />
         <MesInput value={mes} onChange={setMes} />
         {d && <FechoPeriodo tipo="faturacao" mes={mes} area={area} fechado={d.fechado} onDone={() => qc.invalidateQueries({ queryKey: ['prefaturacao'] })}
-          descricao={`Fecha a pré-faturação de ${area === 'REP' ? 'Reposição' : area === 'LOG' ? 'Logística' : 'Promoções'} de ${nomeMes(mes)} com ${eur(d.totais.valor ?? 0)}.`} />}
+          descricao={`Fecha a pré-faturação de ${area === 'REP' ? 'Reposição' : area === 'LOG' ? 'Logística' : area === 'EQF' ? 'Equipas Fixas' : 'Promoções'} de ${nomeMes(mes)} com ${eur(d.totais.valor ?? 0)}.`} />}
       </PageHeader>
-      {q.isLoading ? <Card><Loading /></Card> : q.error || !d ? <ErrorBox error={q.error} /> : area === 'LOG' ? <PreFatLog d={d as unknown as PFLog} mes={mes} /> : (
+      {q.isLoading ? <Card><Loading /></Card> : q.error || !d ? <ErrorBox error={q.error} /> : area === 'LOG' ? <PreFatLog d={d as unknown as PFLog} mes={mes} /> : area === 'EQF' ? <PreFatEqf d={d as unknown as PFEqf} mes={mes} /> : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
             <Kpi label={`A faturar · ${nomeMes(mes)}`} value={eur(d.totais.valor ?? 0)} sub={`${d.clientes.length} clientes`} />
@@ -186,4 +187,79 @@ function PreFatLog({ d, mes }: { d: PFLog; mes: string }) {
       </Card>
     </>
   )
+}
+
+type TotEqf = { valor: number; custo: number; gestao: number; horas_executadas: number; custo_previsto: number; pendentes: number; por_executar: number }
+type LinhaEqf = { linha_id: number; tipo: 'elemento' | 'despesas'; loja: string; numero: string | null; dias_vigencia: number; dias_mes: number; dias_trabalho: number; faltas: number; horas_executadas: number; custo: number; gestao: number; valor: number; margem: number; pendentes_validacao: number; por_executar: number; detalhe?: Record<string, number> }
+type PFEqf = { clientes: { cliente_id: number; cliente: string; codigo_erp: number | null; totais: TotEqf; contratos: { id: number; numero: string; descricao: string | null; totais: TotEqf; linhas: LinhaEqf[] }[] }[]; totais: TotEqf & { margem: number; margem_pct: number } }
+const DESPESA: Record<string, string> = { viatura: 'Viatura', combustivel: 'Combustível', portagens: 'Portagens', telemovel: 'Telemóvel', alojamento: 'Alojamento/refeições', outra: 'Outra' }
+
+function PreFatEqf({ d, mes }: { d: PFEqf; mes: string }) {
+  const t = d.totais
+  const pend = (t.pendentes ?? 0) + (t.por_executar ?? 0)
+  return (
+    <>
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+        <Kpi label={`A faturar · ${nomeMes(mes)}`} value={eur(t.valor ?? 0)} sub={`${d.clientes.length} clientes`} />
+        <Kpi label="Custo total" value={eur(t.custo ?? 0)} sub={`${horas(Math.round((t.horas_executadas ?? 0) * 10) / 10)} validadas com encargos, mais despesas`} />
+        <Kpi label="Valor de gestão" value={eur(t.gestao ?? 0)} sub="em proporção dos dias na equipa" />
+        <Kpi label="Margem bruta" value={`${num(t.margem_pct ?? 0)} %`} sub={`${eur(t.margem ?? 0)} · gestão + acréscimo das despesas`} />
+      </div>
+      {pend > 0 && (
+        <div className="rounded-lg bg-warn-bg text-[#6B4000] px-3.5 py-2.5 text-[13px] flex items-center gap-2">
+          <Icon name="alert" size={16} />{t.pendentes ?? 0} dia(s) já passados por validar{t.por_executar ? ` e ${t.por_executar} ainda por fazer` : ''}: o custo só entra depois de validado (previsto {eur(t.custo_previsto ?? 0)}). O mês só fecha com todos validados.
+        </div>
+      )}
+      <Card className="overflow-hidden">
+        {d.clientes.length === 0 ? <Empty title="Sem equipas fixas neste mês" /> : (
+          <div className="overflow-x-auto">
+            <table className="tbl">
+              <thead><tr><th>Cliente · contrato · colaborador</th><th className="text-right">Dias</th><th className="text-right">Faltas</th><th className="text-right">Horas</th><th className="text-right">Custo</th><th className="text-right">Gestão</th><th className="text-right">A faturar</th><th className="text-right">Margem</th><th className="text-right">Por validar</th></tr></thead>
+              <tbody>{d.clientes.map((c) => (
+                <Fragment key={c.cliente_id}>
+                  <tr className="[&>td]:bg-[#FAFBF9] [&>td]:font-medium">
+                    <td className="font-semibold">{c.cliente}<span className="text-xs text-ink-60 font-normal ml-2">{c.codigo_erp ? `ERP ${c.codigo_erp}` : ''}</span></td>
+                    <td /><td /><td className="text-right num">{horas(Math.round(c.totais.horas_executadas * 10) / 10)}</td>
+                    <td className="text-right num">{eur(c.totais.custo)}</td><td className="text-right num">{eur(c.totais.gestao)}</td>
+                    <td className="text-right num font-semibold">{eur(c.totais.valor)}</td>
+                    <td className="text-right num"><MargemNeutra v={pct(c.totais.valor, c.totais.custo)} /></td><td className="text-right num">{(c.totais.pendentes ?? 0) || '—'}</td>
+                  </tr>
+                  {c.contratos.map((ct) => (
+                    <Fragment key={ct.id}>
+                      <tr><td colSpan={9} className="!py-1.5 !pl-6 text-xs text-ink-60"><span className="font-mono">{ct.numero}</span>{ct.descricao ? ` · ${ct.descricao}` : ''}</td></tr>
+                      {ct.linhas.map((l) => (
+                        <tr key={l.linha_id}>
+                          <td className="!pl-9">{l.loja}{l.tipo === 'elemento' && l.dias_vigencia < l.dias_mes && <span className="text-xs text-ink-60 ml-1.5">({l.dias_vigencia} de {l.dias_mes} dias na equipa)</span>}
+                            {l.detalhe && <div className="text-xs text-ink-60">{Object.entries(l.detalhe).map(([k, v]) => `${DESPESA[k] ?? k} ${eur(v)}`).join(' · ')}</div>}</td>
+                          <td className="text-right num">{l.tipo === 'elemento' ? l.dias_trabalho : '—'}</td>
+                          <td className="text-right num">{l.faltas || '—'}</td>
+                          <td className="text-right num">{l.tipo === 'elemento' ? horas(l.horas_executadas) : '—'}</td>
+                          <td className="text-right num">{eur(l.custo)}</td>
+                          <td className="text-right num">{l.tipo === 'elemento' ? eur(l.gestao) : '—'}</td>
+                          <td className="text-right num">{eur(l.valor)}</td>
+                          <td className="text-right num">{l.valor ? <MargemNeutra v={pct(l.valor, l.custo)} /> : '—'}</td>
+                          <td className="text-right num">{l.pendentes_validacao ? <span className="text-warn-fg">{l.pendentes_validacao}</span> : '—'}</td>
+                        </tr>
+                      ))}
+                    </Fragment>
+                  ))}
+                </Fragment>
+              ))}</tbody>
+              <tfoot><tr className="[&>td]:border-t [&>td]:border-line [&>td]:font-semibold">
+                <td className="px-3 py-3">Total</td><td /><td />
+                <td className="text-right num px-3">{horas(Math.round((t.horas_executadas ?? 0) * 10) / 10)}</td>
+                <td className="text-right num px-3">{eur(t.custo ?? 0)}</td><td className="text-right num px-3">{eur(t.gestao ?? 0)}</td>
+                <td className="text-right num px-3">{eur(t.valor ?? 0)}</td>
+                <td className="text-right num px-3"><MargemNeutra v={t.margem_pct ?? 0} /></td><td className="text-right num px-3">{t.pendentes || '—'}</td>
+              </tr></tfoot>
+            </table>
+          </div>
+        )}
+      </Card>
+    </>
+  )
+}
+
+function MargemNeutra({ v }: { v: number }) {
+  return <span className="font-medium">{num(v)} %</span>
 }

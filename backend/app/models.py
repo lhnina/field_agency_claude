@@ -222,6 +222,9 @@ class Contrato(TenantMixin, Base):
     estado: Mapped[EstadoContrato] = mapped_column(Enum(EstadoContrato, name="estado_contrato"), default=EstadoContrato.proposta)
     descricao: Mapped[str | None] = mapped_column(String(200))
     evento: Mapped[str | None] = mapped_column(String(160))  # promoções: ex. "Campanha de Natal"
+    # Equipas Fixas: valor de gestão mensal por colaborador (por omissão) e acréscimo nas despesas refaturadas
+    valor_gestao: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))
+    acrescimo_despesas_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("0"), server_default="0")
     observacoes: Mapped[str | None] = mapped_column(Text)
     versao: Mapped[int] = mapped_column(Integer, default=1)
     cliente: Mapped[Cliente] = relationship()
@@ -551,3 +554,99 @@ class ServicoLogistico(TenantMixin, Base):
     viatura: Mapped[Viatura | None] = relationship()
     colaborador: Mapped[Colaborador | None] = relationship(foreign_keys=[colaborador_id])
     ajudante: Mapped[Colaborador | None] = relationship(foreign_keys=[ajudante_id])
+
+
+# ---------------------------------------------------------------- equipas fixas
+class RotaEquipa(TenantMixin, Base):
+    """Rota de uma equipa fixa: um conjunto ordenado de lojas visitadas num dia."""
+    __tablename__ = "rotas_equipa"
+    id: Mapped[int] = IdCol()
+    contrato_id: Mapped[int] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
+    nome: Mapped[str] = mapped_column(String(120))
+    observacoes: Mapped[str | None] = mapped_column(Text)
+    ativo: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    lojas: Mapped[list["RotaLoja"]] = relationship(cascade="all, delete-orphan", order_by="RotaLoja.ordem")
+
+
+class RotaLoja(Base):
+    __tablename__ = "rotas_lojas"
+    id: Mapped[int] = IdCol()
+    rota_id: Mapped[int] = mapped_column(ForeignKey("rotas_equipa.id", ondelete="CASCADE"), index=True)
+    loja_id: Mapped[int] = mapped_column(ForeignKey("lojas.id"), index=True)
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+    loja: Mapped[Loja] = relationship()
+
+
+class ElementoEquipa(TenantMixin, Base):
+    """Colaborador de uma equipa fixa, com a escala semanal (rota e horário por dia)."""
+    __tablename__ = "elementos_equipa"
+    id: Mapped[int] = IdCol()
+    contrato_id: Mapped[int] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
+    colaborador_id: Mapped[int] = mapped_column(ForeignKey("colaboradores.id"), index=True)
+    desde: Mapped[date] = mapped_column(Date)
+    ate: Mapped[date | None] = mapped_column(Date)
+    valor_gestao: Mapped[Decimal | None] = mapped_column(Numeric(10, 2))  # vazio = o do contrato
+    observacoes: Mapped[str | None] = mapped_column(Text)
+    colaborador: Mapped[Colaborador] = relationship()
+    escala: Mapped[list["EscalaEquipa"]] = relationship(cascade="all, delete-orphan", order_by="EscalaEquipa.dia")
+
+
+class EscalaEquipa(Base):
+    __tablename__ = "escalas_equipa"
+    __table_args__ = (UniqueConstraint("elemento_id", "dia"), CheckConstraint("dia >= 0 AND dia <= 6", name="ck_escala_dia"))
+    id: Mapped[int] = IdCol()
+    elemento_id: Mapped[int] = mapped_column(ForeignKey("elementos_equipa.id", ondelete="CASCADE"), index=True)
+    dia: Mapped[int] = mapped_column(Integer)  # 0 = segunda
+    rota_id: Mapped[int] = mapped_column(ForeignKey("rotas_equipa.id"))
+    hora_inicio: Mapped[str] = mapped_column(String(5))
+    hora_fim: Mapped[str] = mapped_column(String(5))
+    pausa_min: Mapped[int] = mapped_column(Integer, default=60)
+    rota: Mapped[RotaEquipa] = relationship()
+
+
+class EstadoServicoEquipa(str, enum.Enum):
+    planeado = "planeado"
+    validado = "validado"   # horas confirmadas: contam para custo, faturação e remuneração
+    falta = "falta"         # não trabalhou (ausência): 0 horas
+    cancelado = "cancelado"
+
+
+class ServicoEquipa(TenantMixin, Base):
+    """Dia de trabalho de um elemento da equipa fixa (gerado a partir da escala)."""
+    __tablename__ = "servicos_equipa"
+    __table_args__ = (UniqueConstraint("elemento_id", "data"),)
+    id: Mapped[int] = IdCol()
+    contrato_id: Mapped[int] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
+    elemento_id: Mapped[int] = mapped_column(ForeignKey("elementos_equipa.id", ondelete="CASCADE"), index=True)
+    colaborador_id: Mapped[int] = mapped_column(ForeignKey("colaboradores.id"), index=True)  # quem faz (pode ser substituto)
+    rota_id: Mapped[int | None] = mapped_column(ForeignKey("rotas_equipa.id"))
+    data: Mapped[date] = mapped_column(Date, index=True)
+    hora_inicio: Mapped[str] = mapped_column(String(5))
+    hora_fim: Mapped[str] = mapped_column(String(5))
+    pausa_min: Mapped[int] = mapped_column(Integer, default=60)
+    horas_planeadas: Mapped[Decimal] = mapped_column(Numeric(5, 2))
+    horas_reais: Mapped[Decimal | None] = mapped_column(Numeric(5, 2))
+    estado: Mapped[EstadoServicoEquipa] = mapped_column(Enum(EstadoServicoEquipa, name="estado_servico_equipa"),
+                                                        default=EstadoServicoEquipa.planeado)
+    alterado: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")  # mexido à mão: a escala não o regenera
+    observacao: Mapped[str | None] = mapped_column(String(250))
+    validado_por_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    contrato: Mapped[Contrato] = relationship()
+    elemento: Mapped[ElementoEquipa] = relationship()
+    colaborador: Mapped[Colaborador] = relationship()
+    rota: Mapped[RotaEquipa | None] = relationship()
+
+
+class DespesaEquipa(TenantMixin, Base):
+    """Despesa de uma equipa fixa (viatura, combustível, portagens, telemóvel…), refaturada ao cliente."""
+    __tablename__ = "despesas_equipa"
+    id: Mapped[int] = IdCol()
+    contrato_id: Mapped[int] = mapped_column(ForeignKey("contratos.id", ondelete="CASCADE"), index=True)
+    data: Mapped[date] = mapped_column(Date, index=True)
+    tipo: Mapped[str] = mapped_column(String(20))
+    descricao: Mapped[str | None] = mapped_column(String(200))
+    valor: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    elemento_id: Mapped[int | None] = mapped_column(ForeignKey("elementos_equipa.id", ondelete="SET NULL"))
+    refaturar: Mapped[bool] = mapped_column(Boolean, default=True, server_default="true")
+    registado_por_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+    elemento: Mapped[ElementoEquipa | None] = relationship()

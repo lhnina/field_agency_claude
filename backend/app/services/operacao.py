@@ -240,6 +240,8 @@ def aplicar_saida(db: Session, user: User | None, c: Colaborador) -> dict:
         if s.ajudante_id == c.id:
             s.ajudante_id = None
         res["servicos"] += 1
+    from app.services import equipas as eq  # import local: evita ciclo
+    res["servicos"] += eq.sair(db, user, c)
     if c.ativo and c.data_saida < date.today():
         c.ativo = False
         res["desativado"] = True
@@ -332,7 +334,29 @@ def _horas_por_colaborador(db: Session, tenant_id: int, ini: date, fim: date) ->
         cid = ef or pr
         if cid:
             out[(cid, d)] = out.get((cid, d), Decimal("0")) + h
+    for k, h in _horas_equipas(db, tenant_id, ini, fim).items():
+        out[k] = out.get(k, Decimal("0")) + h
     return out
+
+
+def _horas_equipas(db: Session, tenant_id: int, ini: date, fim: date, ids: set[int] | None = None) -> dict[tuple[int, date], Decimal]:
+    """Horas dos dias de Equipas Fixas (contratos em curso, não faltas nem cancelados)."""
+    from app.models import EstadoServicoEquipa, ServicoEquipa  # import local: evita ciclo
+    q = (select(ServicoEquipa.colaborador_id, ServicoEquipa.data, ServicoEquipa.horas_planeadas, ServicoEquipa.horas_reais)
+         .join(Contrato, ServicoEquipa.contrato_id == Contrato.id)
+         .where(ServicoEquipa.tenant_id == tenant_id, ServicoEquipa.data.between(ini, fim), Contrato.estado == EstadoContrato.ativo,
+                ServicoEquipa.estado.in_((EstadoServicoEquipa.planeado, EstadoServicoEquipa.validado))))
+    if ids is not None:
+        q = q.where(ServicoEquipa.colaborador_id.in_(ids))
+    out: dict[tuple[int, date], Decimal] = {}
+    for cid, d, hp, hr in db.execute(q).all():
+        out[(cid, d)] = out.get((cid, d), Decimal("0")) + (hr if hr is not None else hp)
+    return out
+
+
+def horas_colaborador_dia(db: Session, tenant_id: int, ini: date, fim: date) -> dict[tuple[int, date], Decimal]:
+    """Horas por colaborador e dia em todos os serviços (reposição, promoções e equipas fixas)."""
+    return _horas_por_colaborador(db, tenant_id, ini, fim)
 
 
 def _ausentes(db: Session, tenant_id: int, ini: date, fim: date) -> dict[int, list[Ausencia]]:
@@ -454,6 +478,9 @@ def planeamento_semana(db: Session, user: User, segunda: date, f: FiltroPlaneame
         if o.colaborador_id:
             k = (o.colaborador_id, o.data)
             horas[k] = horas.get(k, Decimal("0")) + o.horas_planeadas
+    if colabs:  # os dias de Equipas Fixas contam para os limites de horas
+        for k, h in _horas_equipas(db, user.tenant_id, segunda, dom, set(colabs)).items():
+            horas[k] = horas.get(k, Decimal("0")) + h
 
     def aus_em(cid: int, d: date) -> Ausencia | None:
         return next((a for a in ausencias.get(cid, []) if a.inicio <= d <= a.fim), None)

@@ -158,9 +158,14 @@ def _colabs(db: Session, tenant_id: int) -> dict[int, Colaborador]:
 def prefaturacao(db: Session, tenant_id: int, mes: date, area: str, hoje: date, clientes: set[int] | None = None) -> dict:
     mes = inicio_mes(mes)
     fim = proximo_mes(mes)
-    if area == TipoContrato.LOG.value:
-        from app.services import logistica as lg
-        lista = lg.prefaturacao(db, tenant_id, mes, fim, hoje, clientes)
+    if area in (TipoContrato.LOG.value, TipoContrato.EQF.value):
+        if area == TipoContrato.LOG.value:
+            from app.services import logistica as lg
+            lista = lg.prefaturacao(db, tenant_id, mes, fim, hoje, clientes)
+        else:
+            from app.services import equipas as eqf
+            eqf.garantir(db, tenant_id, fim)
+            lista = eqf.prefaturacao(db, tenant_id, mes, fim, hoje, clientes)
         tot = defaultdict(float)
         for cl in lista:
             for k, v in cl["totais"].items():
@@ -292,6 +297,27 @@ def apuramento(db: Session, tenant_id: int, mes: date, hoje: date, supervisor_id
                                                       "valor_hora": vh, "horas": Z, "tacitas": 0, "servicos": 0})
             r["horas"] += lg.horas_execucao(s)
             r["servicos"] += 1
+    # Equipas Fixas: dias validados (horas reais) de quem os fez
+    from app.models import EstadoServicoEquipa, ServicoEquipa
+    qe = select(ServicoEquipa).options(joinedload(ServicoEquipa.contrato).joinedload(Contrato.cliente)).where(
+        ServicoEquipa.tenant_id == tenant_id, ServicoEquipa.data >= mes, ServicoEquipa.data < proximo_mes(mes),
+        ServicoEquipa.estado.in_((EstadoServicoEquipa.planeado, EstadoServicoEquipa.validado)))
+    if clientes is not None:
+        qe = qe.join(Contrato, ServicoEquipa.contrato_id == Contrato.id).where(Contrato.cliente_id.in_(clientes))
+    for s in db.scalars(qe).unique().all():
+        cid = s.colaborador_id
+        if supervisor_id and colabs[cid].supervisor_id != supervisor_id:
+            continue
+        if s.estado != EstadoServicoEquipa.validado:
+            if s.data <= hoje:
+                pend_por_colab[cid] += 1
+            continue
+        cli = s.contrato.cliente
+        vh = colabs[cid].custo_hora or Z
+        r = linhas.setdefault((cid, cli.id, vh), {"cliente_id": cli.id, "cliente": cli.nome, "codigo_erp": cli.codigo_erp,
+                                                  "valor_hora": vh, "horas": Z, "tacitas": 0, "servicos": 0})
+        r["horas"] += s.horas_reais or Z
+        r["servicos"] += 1
     por_colab: dict[int, dict] = {}
     for (cid, _, _), r in linhas.items():
         c = colabs[cid]
@@ -358,6 +384,9 @@ def fechar(db: Session, user: User, tipo: TipoPeriodo, mes: date, area: str, hoj
         if area == TipoContrato.LOG.value and (resumo.get("pendentes") or resumo.get("por_executar")):
             raise ValueError(f"Há serviços de logística deste mês por registar ({int(resumo.get('por_executar', 0))}) "
                              f"ou por validar ({int(resumo.get('pendentes', 0))})")
+        if area == TipoContrato.EQF.value and (resumo.get("pendentes") or resumo.get("por_executar")):
+            n = int(resumo.get("pendentes", 0) + resumo.get("por_executar", 0))
+            raise ValueError(f"Há {n} dia(s) de equipas fixas deste mês por validar (valide ou registe a falta)")
     p = PeriodoFechado(tenant_id=user.tenant_id, tipo=tipo, area=area, mes=mes, fechado_por_id=user.id,
                        resumo=json.dumps(resumo, default=str))
     db.add(p)
