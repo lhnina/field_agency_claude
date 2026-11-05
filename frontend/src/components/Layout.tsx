@@ -18,7 +18,6 @@ const GRUPOS: { titulo?: string; itens: Item[] }[] = [
   ] },
   { titulo: 'Comercial', itens: [
     { to: '/contratos', icon: 'file', label: 'Contratos' },
-    { icon: 'mega', label: 'Campanhas' },
     { to: '/clientes', icon: 'store', label: 'Clientes e lojas' },
   ] },
   { titulo: 'Pessoas', itens: [

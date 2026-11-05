@@ -146,6 +146,8 @@ Clientes, lojas e colaboradores que já existem são atualizados; as células va
 
 ## Próximos passos
 
-- Documentação com validades (B17) e alertas no planeamento.
-- App do colaborador (PWA): escala, confirmação e registo de horas (B18). Passa a alimentar a origem "registo" na validação.
-- Envio da pré-faturação para o ERP, como dossier interno BO/BI com detalhe por loja (Q7, fase 2).
+- Equipas Fixas: a quarta área de contrato.
+- Rentabilidade: margem por cliente, contrato, loja e colaborador ao longo do tempo.
+- App do colaborador (PWA): escala, confirmação e registo de horas; na Logística, km, horas e comprovativo pelo motorista. Passa a alimentar a origem "registo" na validação.
+- Envio da pré-faturação para o ERP, como documento interno com detalhe por loja, e exportação do apuramento para o processamento salarial.
+- As campanhas são os contratos de Promoções (campo Evento); não há um módulo próprio.
