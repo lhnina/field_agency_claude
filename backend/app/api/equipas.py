@@ -278,6 +278,27 @@ def semana(inicio: date | None = None, contrato_id: int | None = None, cliente_i
                        "horas": sum(ln["horas"] for ln in itens), "elementos": len(itens)}}
 
 
+@router.get("/dashboard/equipas")
+def dashboard(user: User = Depends(requer("planeamento.ler")), db: Session = Depends(get_db)):
+    hoje = date.today()
+    seg = hoje - timedelta(days=hoje.weekday())
+    eq.garantir(db, user.tenant_id, max(seg + timedelta(days=6), _horizonte()))
+    db.commit()
+    q = (select(ServicoEquipa).options(*eq.opcoes()).join(Contrato, ServicoEquipa.contrato_id == Contrato.id)
+         .where(ServicoEquipa.tenant_id == user.tenant_id, Contrato.estado == EstadoContrato.ativo,
+                ServicoEquipa.estado != EstadoServicoEquipa.cancelado,
+                ServicoEquipa.data.between(hoje.replace(day=1) - timedelta(days=31), seg + timedelta(days=6))))
+    permitidos, zona = ambito.clientes_permitidos(db, user), ambito.zona_supervisor(user)
+    servs = [s for s in db.scalars(q).unique().all() if _visivel(db, user, s, permitidos, zona)]
+    semana = [s for s in servs if s.data >= seg]
+    ctx = eq.Contexto(db, user.tenant_id, [s for s in semana if s.estado == EstadoServicoEquipa.planeado])
+    return {"colaboradores": len({s.elemento_id for s in semana}), "dias_semana": len(semana),
+            "por_validar": sum(1 for s in servs if s.estado == EstadoServicoEquipa.planeado and s.data < hoje),
+            "faltas_semana": sum(1 for s in semana if s.estado == EstadoServicoEquipa.falta),
+            "substituicoes_semana": sum(1 for s in semana if s.colaborador_id != s.elemento.colaborador_id),
+            "ausentes": sum(1 for s in semana if s.estado == EstadoServicoEquipa.planeado and ctx.ausente(s.colaborador_id, s.data))}
+
+
 # ------------------------------------------------------------------ dia de trabalho
 def _servico(db: Session, user: User, sid: int) -> ServicoEquipa:
     s = db.scalar(select(ServicoEquipa).options(*eq.opcoes()).where(ServicoEquipa.id == sid,

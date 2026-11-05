@@ -83,6 +83,9 @@ def dashboard(user: User = Depends(requer("planeamento.ler")), db: Session = Dep
         sc = sc.where(Contrato.cliente_id.in_(permitidos))
     contratos = db.scalars(sc).all()
     valor = sum((op.valor_mensal_linha(ln) for c in contratos for ln in c.linhas if ln.fim is None or ln.fim >= hoje), Decimal("0"))
+    from app.models import TipoContrato
+    from app.services import equipas as eqf
+    valor += sum((eqf.resumo_contrato(db, c, hoje)["previsto"] for c in contratos if c.tipo == TipoContrato.EQF), Decimal("0"))
     horas_mes = sum((op.horas_mes_linha(ln) for c in contratos for ln in c.linhas if ln.fim is None or ln.fim >= hoje), Decimal("0"))
     ini_mes = hoje.replace(day=1)
     prox = (ini_mes + timedelta(days=32)).replace(day=1)
